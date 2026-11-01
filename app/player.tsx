@@ -5,6 +5,7 @@ import { View, Text, Image, TouchableOpacity, ScrollView, StyleSheet } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
+import { BlurView } from 'expo-blur';
 import {
   ChevronDown,
   Play,
@@ -102,6 +103,8 @@ export default function PlayerScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={[styles.ambientGlow, { backgroundColor: accentColor }]} />
+      <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFillObject} />
       <View style={styles.container}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
@@ -282,7 +285,16 @@ export default function PlayerScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0D0C14' },
+  safe: { flex: 1, backgroundColor: '#09080F', overflow: 'hidden' },
+  ambientGlow: {
+    position: 'absolute',
+    top: '18%',
+    left: '12%',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    opacity: 0.28
+  },
   container: { flex: 1, paddingHorizontal: 20, paddingBottom: 20 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { color: '#A1A1AA', fontSize: 16 },
