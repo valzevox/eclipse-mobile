@@ -4,37 +4,69 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: TypeScript Verification
+      - name: TypeScript Check
         run: npm run typecheck
 
-      - name: Export Mobile Bundle (Android & iOS)
-        run: npx expo export --output-dir dist-mobile
+      - name: Generate Android Native Project
+        run: npx expo prebuild --platform android --clean
 
-      - name: Package Release Archive
+      - name: Build Android Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare APK Asset
         run: |
-          zip -r eclipse-mobile-${GITHUB_REF_NAME}.zip dist-mobile app.json package.json
+          mkdir -p build-artifacts
+          TAG_VER="${GITHUB_REF_NAME}"
+          if [ -z "$TAG_VER" ] || [ "$TAG_VER" = "main" ]; then
+            TAG_VER="v1.0.0"
+          fi
+          cp android/app/build/outputs/apk/release/*-unsigned.apk build-artifacts/eclipse-mobile-${TAG_VER}.apk || cp android/app/build/outputs/apk/release/*.apk build-artifacts/eclipse-mobile-${TAG_VER}.apk
+          ls -la build-artifacts/
 
-      - name: Create GitHub Release
+      - name: Create / Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: eclipse-mobile-${{ github.ref_name }}.zip
+          name: ${{ github.ref_name }}
+          files: build-artifacts/*.apk
           generate_release_notes: true
