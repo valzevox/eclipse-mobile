@@ -1,6 +1,6 @@
 {
   "name": "eclipse-mobile",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "main": "expo-router/entry",
   "private": true,
   "scripts": {

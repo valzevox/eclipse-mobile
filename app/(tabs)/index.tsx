@@ -31,13 +31,20 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.greetingText}>
-              {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}
-            </Text>
-            <View style={styles.brandRow}>
-              <Text style={styles.brand}>Eclipse</Text>
-              <View style={[styles.dot, { backgroundColor: accentColor }]} />
+          <View style={styles.brandRow}>
+            <Image
+              source={require('../../assets/icon.png')}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+            <View>
+              <Text style={styles.greetingText}>
+                {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}
+              </Text>
+              <View style={styles.brandTitleWrap}>
+                <Text style={styles.brand}>Eclipse</Text>
+                <View style={[styles.dot, { backgroundColor: accentColor }]} />
+              </View>
             </View>
           </View>
           <View style={[styles.livePill, { borderColor: `${accentColor}55` }]}>
@@ -136,7 +143,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 18, paddingBottom: 130 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  brandLogo: { width: 40, height: 40, borderRadius: 10 },
+  brandTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   greetingText: { color: '#71717A', fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
   livePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' },
   liveDot: { width: 6, height: 6, borderRadius: 3 },

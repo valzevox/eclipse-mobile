@@ -1,7 +1,7 @@
 // TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, SponsorBlock, Loudness Norm, In-App Update & Presence Settings
 
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Globe, Sparkles, Languages, Radio, Sliders, RefreshCw, CheckCircle2 } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
@@ -182,7 +182,11 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Languages size={18} color={accentColor} />
+            <Image
+              source={require('../../assets/icon.png')}
+              style={{ width: 28, height: 28, borderRadius: 7 }}
+              resizeMode="contain"
+            />
             <Text style={styles.cardTitle}>Eclipse v{currentVer}</Text>
           </View>
           <Text style={styles.aboutText}>
