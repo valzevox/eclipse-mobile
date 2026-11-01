@@ -1,9 +1,9 @@
-// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, Translation Target & Audio Settings
+// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, Translation Target, Scrobbler & Audio Settings
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Globe, Sparkles, Languages } from 'lucide-react-native';
+import { Globe, Sparkles, Languages, Radio } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { UI_LANGUAGES, tr } from '../../src/services/i18n';
 
@@ -17,6 +17,8 @@ export default function SettingsScreen() {
     romanizeEnabled,
     translateEnabled,
     accentColor,
+    scrobblerConfig,
+    setScrobblerConfig,
     toggleWordSync,
     toggleRomanize,
     toggleTranslate
@@ -104,6 +106,35 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
+            <Radio size={18} color={accentColor} />
+            <Text style={styles.cardTitle}>Discord & Last.fm Presence</Text>
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Enable Rich Presence / Scrobbling</Text>
+            <Switch
+              value={scrobblerConfig.enabled}
+              onValueChange={(val) => setScrobblerConfig({ enabled: val })}
+              trackColor={{ false: '#27272A', true: accentColor }}
+            />
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Discord Webhook URL (optional)..."
+            placeholderTextColor="#71717A"
+            value={scrobblerConfig.discordWebhookUrl}
+            onChangeText={(txt) => setScrobblerConfig({ discordWebhookUrl: txt })}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Last.fm Username..."
+            placeholderTextColor="#71717A"
+            value={scrobblerConfig.lastFmUsername}
+            onChangeText={(txt) => setScrobblerConfig({ lastFmUsername: txt })}
+          />
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
             <Languages size={18} color={accentColor} />
             <Text style={styles.cardTitle}>Eclipse v1.0.0</Text>
           </View>
@@ -147,5 +178,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   toggleLabel: { color: '#E4E4E7', fontSize: 14, fontWeight: '500' },
+  input: {
+    backgroundColor: '#1F1F26',
+    color: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
+    fontSize: 13
+  },
   aboutText: { color: '#A1A1AA', fontSize: 13, lineHeight: 20 }
 });

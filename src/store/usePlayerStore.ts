@@ -7,6 +7,7 @@ import { TrackItem, getDefaultTrendingTracks, resolveStreamUrl, searchTracks } f
 import { LyricLine, LyricsSource, fetchSyncedLyrics, enrichLyricsWithTranslationAndRomaji } from '../services/lyrics';
 import { LangCode } from '../services/i18n';
 import { ImportedPlaylist } from '../services/playlistImport';
+import { ScrobblerConfig, sendNowPlayingStatus } from '../services/scrobbler';
 
 export type AudioPreset = 'normal' | 'nightcore' | 'slowed';
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -52,9 +53,12 @@ interface PlayerState {
   sleepRemainingSec: number;
   accentColor: string;
   totalSecondsListened: number;
+  scrobblerConfig: ScrobblerConfig;
   hydrated: boolean;
 
   hydrateStore: () => Promise<void>;
+  setCustomLyrics: (lines: LyricLine[]) => void;
+  setScrobblerConfig: (cfg: Partial<ScrobblerConfig>) => void;
   playTrack: (track: TrackItem, newQueue?: TrackItem[]) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (seconds: number) => Promise<void>;
@@ -96,7 +100,8 @@ async function savePersistedSlice(state: Partial<PlayerState>) {
       wordSyncEnabled: state.wordSyncEnabled,
       romanizeEnabled: state.romanizeEnabled,
       translateEnabled: state.translateEnabled,
-      totalSecondsListened: state.totalSecondsListened
+      totalSecondsListened: state.totalSecondsListened,
+      scrobblerConfig: state.scrobblerConfig
     });
     await AsyncStorage.setItem(STORAGE_KEY, payload);
   } catch (_) {}
@@ -132,6 +137,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   sleepRemainingSec: 0,
   accentColor: '#B69DF8',
   totalSecondsListened: 1420,
+  scrobblerConfig: {
+    lastFmUsername: '',
+    lastFmApiKey: '',
+    discordWebhookUrl: '',
+    enabled: false
+  },
   hydrated: false,
 
   hydrateStore: async () => {
@@ -152,12 +163,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           romanizeEnabled: typeof data.romanizeEnabled === 'boolean' ? data.romanizeEnabled : true,
           translateEnabled: typeof data.translateEnabled === 'boolean' ? data.translateEnabled : false,
           totalSecondsListened: typeof data.totalSecondsListened === 'number' ? data.totalSecondsListened : 1420,
+          scrobblerConfig: data.scrobblerConfig || get().scrobblerConfig,
           hydrated: true
         });
         return;
       }
     } catch (_) {}
     set({ hydrated: true });
+  },
+
+  setCustomLyrics: (lines) => set({ lyrics: lines }),
+
+  setScrobblerConfig: (cfg) => {
+    set((s) => ({ scrobblerConfig: { ...s.scrobblerConfig, ...cfg } }));
+    savePersistedSlice(get());
   },
 
   playTrack: async (track, newQueue) => {
@@ -189,6 +208,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       lyrics: []
     });
     savePersistedSlice(get());
+    sendNowPlayingStatus(track, get().scrobblerConfig);
 
     const { lyricsSource, romanizeEnabled, translateEnabled, translationLang } = get();
     fetchSyncedLyrics(track.title, track.artist, track.duration, lyricsSource).then(async (rawLines) => {

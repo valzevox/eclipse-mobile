@@ -1,8 +1,10 @@
-// TypeScript / src/components/LyricsView.tsx / Expo React Native / AMLL Word-by-Word & Romanized Synced Lyrics
+// TypeScript / src/components/LyricsView.tsx / Expo React Native / AMLL Auto-Scrolling Word-by-Word & Romanized Synced Lyrics
 
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
+import { Search } from 'lucide-react-native';
 import { usePlayerStore } from '../store/usePlayerStore';
+import { fetchSyncedLyrics, enrichLyricsWithTranslationAndRomaji } from '../services/lyrics';
 
 export function LyricsView() {
   const {
@@ -12,14 +14,22 @@ export function LyricsView() {
     wordSyncEnabled,
     romanizeEnabled,
     translateEnabled,
+    translationLang,
+    accentColor,
     seekTo,
     adjustLyricsOffset,
     toggleWordSync,
     toggleRomanize,
     toggleTranslate,
     lyricsSource,
-    setLyricsSource
+    setLyricsSource,
+    setCustomLyrics
   } = usePlayerStore();
+
+  const scrollRef = useRef<ScrollView>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [customQuery, setCustomQuery] = useState('');
+  const [searching, setSearching] = useState(false);
 
   const effectiveTime = position - lyricsOffset;
 
@@ -33,10 +43,34 @@ export function LyricsView() {
     return idx;
   }, [lyrics, effectiveTime]);
 
+  useEffect(() => {
+    if (activeIndex >= 0 && scrollRef.current) {
+      const targetY = Math.max(0, activeIndex * 64 - 110);
+      scrollRef.current.scrollTo({ y: targetY, animated: true });
+    }
+  }, [activeIndex]);
+
   const cycleSource = () => {
     const order: ('lrclib' | 'netease' | 'kugou' | 'zingmp3')[] = ['lrclib', 'netease', 'kugou', 'zingmp3'];
     const next = order[(order.indexOf(lyricsSource) + 1) % order.length];
     setLyricsSource(next);
+  };
+
+  const runCustomLyricSearch = async () => {
+    if (!customQuery.trim() || searching) return;
+    setSearching(true);
+    const parts = customQuery.split('-').map((s) => s.trim());
+    const title = parts[0] || customQuery.trim();
+    const artist = parts[1] || '';
+    const rawLines = await fetchSyncedLyrics(title, artist, 0, lyricsSource);
+    const enriched = await enrichLyricsWithTranslationAndRomaji(
+      rawLines,
+      romanizeEnabled,
+      translateEnabled ? translationLang : null
+    );
+    setCustomLyrics(enriched);
+    setSearching(false);
+    setShowSearch(false);
   };
 
   return (
@@ -53,32 +87,55 @@ export function LyricsView() {
         </View>
 
         <TouchableOpacity onPress={cycleSource} style={styles.sourceBtn}>
-          <Text style={styles.sourceText}>{lyricsSource.toUpperCase()}</Text>
+          <Text style={[styles.sourceText, { color: accentColor }]}>{lyricsSource.toUpperCase()}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={toggleWordSync}
-          style={[styles.modeBtn, wordSyncEnabled && styles.modeBtnActive]}
+          style={[styles.modeBtn, wordSyncEnabled && { backgroundColor: accentColor }]}
         >
           <Text style={[styles.modeText, wordSyncEnabled && styles.modeTextActive]}>Word</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={toggleRomanize}
-          style={[styles.modeBtn, romanizeEnabled && styles.modeBtnActive]}
+          style={[styles.modeBtn, romanizeEnabled && { backgroundColor: accentColor }]}
         >
           <Text style={[styles.modeText, romanizeEnabled && styles.modeTextActive]}>Romaji</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={toggleTranslate}
-          style={[styles.modeBtn, translateEnabled && styles.modeBtnActive]}
+          style={[styles.modeBtn, translateEnabled && { backgroundColor: accentColor }]}
         >
           <Text style={[styles.modeText, translateEnabled && styles.modeTextActive]}>文A</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => setShowSearch(!showSearch)} style={styles.pillBtn}>
+          <Search size={13} color="#E4E4E7" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      {showSearch && (
+        <View style={styles.searchBar}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Song Title - Artist..."
+            placeholderTextColor="#71717A"
+            value={customQuery}
+            onChangeText={setCustomQuery}
+            onSubmitEditing={runCustomLyricSearch}
+          />
+          <TouchableOpacity
+            onPress={runCustomLyricSearch}
+            style={[styles.searchGoBtn, { backgroundColor: accentColor }]}
+          >
+            <Text style={styles.modeTextActive}>{searching ? '...' : 'Find'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {lyrics.length === 0 ? (
           <Text style={styles.empty}>Searching synchronized lyrics...</Text>
         ) : (
@@ -100,7 +157,7 @@ export function LyricsView() {
                       return (
                         <Text
                           key={wi}
-                          style={{ color: sung ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }}
+                          style={{ color: sung ? accentColor : 'rgba(255,255,255,0.45)' }}
                         >
                           {w.text}
                         </Text>
@@ -116,7 +173,9 @@ export function LyricsView() {
                 ) : null}
 
                 {translateEnabled && line.translation ? (
-                  <Text style={[styles.transText, isActive && styles.activeSubText]}>{line.translation}</Text>
+                  <Text style={[styles.transText, { color: accentColor }, isActive && styles.activeSubText]}>
+                    {line.translation}
+                  </Text>
                 ) : null}
               </TouchableOpacity>
             );
@@ -137,8 +196,28 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    marginBottom: 14,
-    gap: 6
+    marginBottom: 10,
+    gap: 5
+  },
+  searchBar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#18181F',
+    color: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 36,
+    fontSize: 13
+  },
+  searchGoBtn: {
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   offsetGroup: {
     flexDirection: 'row',
@@ -147,30 +226,27 @@ const styles = StyleSheet.create({
   },
   pillBtn: {
     paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.1)'
   },
   pillText: { color: '#E4E4E7', fontSize: 11, fontWeight: '600' },
-  offsetVal: { color: '#A1A1AA', fontSize: 11, minWidth: 28, textAlign: 'center' },
+  offsetVal: { color: '#A1A1AA', fontSize: 11, minWidth: 26, textAlign: 'center' },
   sourceBtn: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 99,
-    backgroundColor: 'rgba(182, 157, 248, 0.2)'
+    backgroundColor: 'rgba(182, 157, 248, 0.15)'
   },
-  sourceText: { color: '#B69DF8', fontSize: 11, fontWeight: '700' },
+  sourceText: { fontSize: 11, fontWeight: '700' },
   modeBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 99,
     backgroundColor: 'rgba(255,255,255,0.08)'
   },
-  modeBtnActive: {
-    backgroundColor: '#B69DF8'
-  },
   modeText: { color: '#D4D4D8', fontSize: 11, fontWeight: '600' },
-  modeTextActive: { color: '#09090B', fontWeight: '700' },
+  modeTextActive: { color: '#09090B', fontWeight: '700', fontSize: 11 },
   scroll: { flex: 1 },
   scrollContent: { paddingVertical: 28, gap: 18 },
   empty: { color: '#71717A', textAlign: 'center', marginTop: 40, fontSize: 15 },
@@ -192,7 +268,6 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   transText: {
-    color: '#B69DF8',
     fontSize: 14,
     fontWeight: '500',
     marginTop: 2
