@@ -1,10 +1,10 @@
-// TypeScript / app/(tabs)/library.tsx / Expo React Native / Favorites, Downloads, Local Files & Playlists
+// TypeScript / app/(tabs)/library.tsx / Expo React Native / Favorites, Offline Downloads Management, Local Files & Multi-Platform Playlists
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Heart, PlusCircle, Play, ListMusic, Download, FolderOpen } from 'lucide-react-native';
+import { Heart, PlusCircle, Play, ListMusic, Download, FolderOpen, Trash2 } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { importExternalPlaylist } from '../../src/services/playlistImport';
 import { pickLocalAudioFiles } from '../../src/services/offlineCache';
@@ -12,7 +12,20 @@ import { tr } from '../../src/services/i18n';
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const { favorites, downloads, localFiles, playlists, playTrack, addPlaylist, addLocalFiles, uiLang } = usePlayerStore();
+  const {
+    favorites,
+    downloads,
+    localFiles,
+    playlists,
+    accentColor,
+    playTrack,
+    addPlaylist,
+    removePlaylist,
+    removeDownload,
+    clearDownloads,
+    addLocalFiles,
+    uiLang
+  } = usePlayerStore();
   const [importInput, setImportInput] = useState('');
   const [importing, setImporting] = useState(false);
 
@@ -37,23 +50,23 @@ export default function LibraryScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.title}>{tr(uiLang, 'library')}</Text>
-          <TouchableOpacity style={styles.localBtn} onPress={handlePickLocal}>
-            <FolderOpen size={16} color="#B69DF8" />
-            <Text style={styles.localBtnText}>Local Files ({localFiles.length})</Text>
+          <TouchableOpacity style={[styles.localBtn, { borderColor: `${accentColor}44` }]} onPress={handlePickLocal}>
+            <FolderOpen size={16} color={accentColor} />
+            <Text style={[styles.localBtnText, { color: accentColor }]}>Local Files ({localFiles.length})</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.importCard}>
-          <Text style={styles.importLabel}>{tr(uiLang, 'importPlaylist')}</Text>
+          <Text style={styles.importLabel}>Import Playlist (Spotify / YT Music / Apple / Yandex / NetEase)</Text>
           <View style={styles.importRow}>
             <TextInput
               style={styles.input}
-              placeholder="Paste Spotify / YouTube Music link..."
+              placeholder="Paste playlist or album URL..."
               placeholderTextColor="#71717A"
               value={importInput}
               onChangeText={setImportInput}
             />
-            <TouchableOpacity style={styles.importBtn} onPress={handleImport}>
+            <TouchableOpacity style={[styles.importBtn, { backgroundColor: accentColor }]} onPress={handleImport}>
               <PlusCircle size={18} color="#09090B" />
               <Text style={styles.importBtnText}>{importing ? '...' : 'Import'}</Text>
             </TouchableOpacity>
@@ -77,15 +90,23 @@ export default function LibraryScreen() {
                 {item.artist}
               </Text>
             </View>
-            <Play size={18} color="#B69DF8" />
+            <Play size={18} color={accentColor} />
           </TouchableOpacity>
         ))}
 
-        <View style={[styles.sectionHeader, { marginTop: 18 }]}>
-          <Download size={18} color="#10B981" />
-          <Text style={styles.sectionTitle}>
-            {tr(uiLang, 'downloads')} ({downloads.length})
-          </Text>
+        <View style={[styles.sectionHeader, { marginTop: 18, justifyContent: 'space-between' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Download size={18} color="#10B981" />
+            <Text style={styles.sectionTitle}>
+              {tr(uiLang, 'downloads')} ({downloads.length})
+            </Text>
+          </View>
+          {downloads.length > 0 && (
+            <TouchableOpacity onPress={clearDownloads} style={styles.clearBtn}>
+              <Trash2 size={14} color="#EF4444" />
+              <Text style={styles.clearText}>Clear All</Text>
+            </TouchableOpacity>
+          )}
         </View>
         {downloads.map((item) => (
           <TouchableOpacity key={`dl_${item.id}`} style={styles.row} onPress={() => playTrack(item, downloads)}>
@@ -98,6 +119,9 @@ export default function LibraryScreen() {
                 {item.artist}
               </Text>
             </View>
+            <TouchableOpacity onPress={() => removeDownload(item)} style={{ padding: 6 }}>
+              <Trash2 size={16} color="#71717A" />
+            </TouchableOpacity>
             <Play size={18} color="#10B981" />
           </TouchableOpacity>
         ))}
@@ -105,7 +129,7 @@ export default function LibraryScreen() {
         {localFiles.length > 0 && (
           <>
             <View style={[styles.sectionHeader, { marginTop: 18 }]}>
-              <FolderOpen size={18} color="#B69DF8" />
+              <FolderOpen size={18} color={accentColor} />
               <Text style={styles.sectionTitle}>Local Audio ({localFiles.length})</Text>
             </View>
             {localFiles.map((item) => (
@@ -119,14 +143,14 @@ export default function LibraryScreen() {
                     {item.artist}
                   </Text>
                 </View>
-                <Play size={18} color="#B69DF8" />
+                <Play size={18} color={accentColor} />
               </TouchableOpacity>
             ))}
           </>
         )}
 
         <View style={[styles.sectionHeader, { marginTop: 18 }]}>
-          <ListMusic size={18} color="#B69DF8" />
+          <ListMusic size={18} color={accentColor} />
           <Text style={styles.sectionTitle}>
             {tr(uiLang, 'playlists')} ({playlists.length})
           </Text>
@@ -141,7 +165,10 @@ export default function LibraryScreen() {
               <Text style={styles.trackTitle}>{pl.name}</Text>
               <Text style={styles.trackArtist}>{pl.tracks.length} tracks</Text>
             </View>
-            <Play size={18} color="#B69DF8" />
+            <TouchableOpacity onPress={() => removePlaylist(pl.id)} style={{ padding: 8 }}>
+              <Trash2 size={16} color="#71717A" />
+            </TouchableOpacity>
+            <Play size={18} color={accentColor} />
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -163,10 +190,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 99,
-    borderWidth: 1,
-    borderColor: 'rgba(182, 157, 248, 0.25)'
+    borderWidth: 1
   },
-  localBtnText: { color: '#B69DF8', fontSize: 12, fontWeight: '600' },
+  localBtnText: { fontSize: 12, fontWeight: '600' },
   importCard: {
     backgroundColor: '#141418',
     borderRadius: 18,
@@ -175,7 +201,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)'
   },
-  importLabel: { color: '#E4E4E7', fontSize: 13, fontWeight: '600', marginBottom: 10 },
+  importLabel: { color: '#E4E4E7', fontSize: 12, fontWeight: '600', marginBottom: 10 },
   importRow: { flexDirection: 'row', gap: 8 },
   input: {
     flex: 1,
@@ -189,7 +215,6 @@ const styles = StyleSheet.create({
   importBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B69DF8',
     paddingHorizontal: 14,
     borderRadius: 12,
     gap: 6
@@ -197,6 +222,16 @@ const styles = StyleSheet.create({
   importBtnText: { color: '#09090B', fontWeight: '700', fontSize: 13 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 6 },
   sectionTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  clearBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 99
+  },
+  clearText: { color: '#EF4444', fontSize: 11, fontWeight: '600' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -210,7 +245,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#18181F',
     padding: 14,
-    borderRadius: 14
+    borderRadius: 14,
+    gap: 10
   },
   art: { width: 48, height: 48, borderRadius: 10 },
   meta: { flex: 1 },

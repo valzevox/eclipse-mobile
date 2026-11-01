@@ -1,4 +1,4 @@
-// TypeScript / src/store/usePlayerStore.ts / Expo React Native / Zustand Audio, Persistence, Sleep Timer & Dynamic Theme Store
+// TypeScript / src/store/usePlayerStore.ts / Expo React Native / Zustand Audio, SponsorBlock, Loudness Norm, Sleep Timer & Dynamic Theme Store
 
 import { create } from 'zustand';
 import { Audio } from 'expo-av';
@@ -8,6 +8,8 @@ import { LyricLine, LyricsSource, fetchSyncedLyrics, enrichLyricsWithTranslation
 import { LangCode } from '../services/i18n';
 import { ImportedPlaylist } from '../services/playlistImport';
 import { ScrobblerConfig, sendNowPlayingStatus } from '../services/scrobbler';
+import { SkipSegment, fetchSponsorSegments } from '../services/sponsorblock';
+import { removeOfflineTrackFile, clearAllOfflineFiles } from '../services/offlineCache';
 
 export type AudioPreset = 'normal' | 'nightcore' | 'slowed';
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -49,6 +51,9 @@ interface PlayerState {
   trimEnd: number;
   shuffleEnabled: boolean;
   repeatMode: RepeatMode;
+  sponsorBlockEnabled: boolean;
+  loudnessNormEnabled: boolean;
+  skipSegments: SkipSegment[];
   sleepTimerEnd: number | null;
   sleepRemainingSec: number;
   accentColor: string;
@@ -59,6 +64,8 @@ interface PlayerState {
   hydrateStore: () => Promise<void>;
   setCustomLyrics: (lines: LyricLine[]) => void;
   setScrobblerConfig: (cfg: Partial<ScrobblerConfig>) => void;
+  toggleSponsorBlock: () => void;
+  toggleLoudnessNorm: () => Promise<void>;
   playTrack: (track: TrackItem, newQueue?: TrackItem[]) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (seconds: number) => Promise<void>;
@@ -80,7 +87,10 @@ interface PlayerState {
   setTempoAndPitch: (tempo: number, pitch: number) => Promise<void>;
   setTrimRange: (start: number, end: number) => void;
   addPlaylist: (pl: ImportedPlaylist) => void;
+  removePlaylist: (playlistId: string) => void;
   addDownload: (track: TrackItem) => void;
+  removeDownload: (track: TrackItem) => Promise<void>;
+  clearDownloads: () => Promise<void>;
   addLocalFiles: (tracks: TrackItem[]) => void;
 }
 
@@ -100,6 +110,8 @@ async function savePersistedSlice(state: Partial<PlayerState>) {
       wordSyncEnabled: state.wordSyncEnabled,
       romanizeEnabled: state.romanizeEnabled,
       translateEnabled: state.translateEnabled,
+      sponsorBlockEnabled: state.sponsorBlockEnabled,
+      loudnessNormEnabled: state.loudnessNormEnabled,
       totalSecondsListened: state.totalSecondsListened,
       scrobblerConfig: state.scrobblerConfig
     });
@@ -133,6 +145,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   trimEnd: 0,
   shuffleEnabled: false,
   repeatMode: 'off',
+  sponsorBlockEnabled: true,
+  loudnessNormEnabled: true,
+  skipSegments: [],
   sleepTimerEnd: null,
   sleepRemainingSec: 0,
   accentColor: '#B69DF8',
@@ -162,6 +177,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           wordSyncEnabled: typeof data.wordSyncEnabled === 'boolean' ? data.wordSyncEnabled : true,
           romanizeEnabled: typeof data.romanizeEnabled === 'boolean' ? data.romanizeEnabled : true,
           translateEnabled: typeof data.translateEnabled === 'boolean' ? data.translateEnabled : false,
+          sponsorBlockEnabled: typeof data.sponsorBlockEnabled === 'boolean' ? data.sponsorBlockEnabled : true,
+          loudnessNormEnabled: typeof data.loudnessNormEnabled === 'boolean' ? data.loudnessNormEnabled : true,
           totalSecondsListened: typeof data.totalSecondsListened === 'number' ? data.totalSecondsListened : 1420,
           scrobblerConfig: data.scrobblerConfig || get().scrobblerConfig,
           hydrated: true
@@ -177,6 +194,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setScrobblerConfig: (cfg) => {
     set((s) => ({ scrobblerConfig: { ...s.scrobblerConfig, ...cfg } }));
     savePersistedSlice(get());
+  },
+
+  toggleSponsorBlock: () => {
+    set((s) => ({ sponsorBlockEnabled: !s.sponsorBlockEnabled }));
+    savePersistedSlice(get());
+  },
+
+  toggleLoudnessNorm: async () => {
+    const nextVal = !get().loudnessNormEnabled;
+    set({ loudnessNormEnabled: nextVal });
+    savePersistedSlice(get());
+    try {
+      if (soundInstance) {
+        await soundInstance.setVolumeAsync(nextVal ? 0.88 : 1.0);
+      }
+    } catch (_) {}
   },
 
   playTrack: async (track, newQueue) => {
@@ -204,11 +237,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       duration: track.duration || 180,
       trimStart: 0,
       trimEnd: track.duration || 180,
+      skipSegments: [],
       accentColor,
       lyrics: []
     });
     savePersistedSlice(get());
     sendNowPlayingStatus(track, get().scrobblerConfig);
+
+    fetchSponsorSegments(track.id).then((segs) => {
+      if (get().currentTrack?.id === track.id) {
+        set({ skipSegments: segs });
+      }
+    });
 
     const { lyricsSource, romanizeEnabled, translateEnabled, translationLang } = get();
     fetchSyncedLyrics(track.title, track.artist, track.duration, lyricsSource).then(async (rawLines) => {
@@ -224,25 +264,40 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     try {
       const uri = await resolveStreamUrl(track);
+      const baseVol = get().loudnessNormEnabled ? 0.88 : 1.0;
       const { sound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: true, rate: get().tempo, shouldCorrectPitch: get().pitch === 1.0 },
+        {
+          shouldPlay: true,
+          volume: baseVol,
+          rate: get().tempo,
+          shouldCorrectPitch: get().pitch === 1.0
+        },
         (status) => {
           if (!status.isLoaded) return;
           const posSec = status.positionMillis / 1000;
           const durSec = (status.durationMillis || track.duration * 1000) / 1000;
-          const { trimEnd, sleepTimerEnd } = get();
+          const { trimEnd, sleepTimerEnd, sponsorBlockEnabled, skipSegments } = get();
+
+          // SponsorBlock / Silence & Intro/Outro Auto-Skip
+          if (sponsorBlockEnabled && skipSegments.length > 0) {
+            const hit = skipSegments.find((s) => posSec >= s.start && posSec < s.end - 0.4);
+            if (hit && hit.end < durSec) {
+              soundInstance?.setPositionAsync(hit.end * 1000);
+              return;
+            }
+          }
 
           if (sleepTimerEnd) {
             const rem = Math.max(0, Math.round((sleepTimerEnd - Date.now()) / 1000));
             if (rem <= 0) {
               soundInstance?.pauseAsync();
-              soundInstance?.setVolumeAsync(1.0);
+              soundInstance?.setVolumeAsync(baseVol);
               set({ isPlaying: false, sleepTimerEnd: null, sleepRemainingSec: 0 });
               return;
             }
             if (rem <= 10) {
-              soundInstance?.setVolumeAsync(Math.max(0.1, rem / 10));
+              soundInstance?.setVolumeAsync(Math.max(0.08, (rem / 10) * baseVol));
             }
             set({ sleepRemainingSec: rem });
           }
@@ -311,7 +366,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
     if (idx === queue.length - 1 && get().repeatMode === 'off') {
-      // Endless My Wave auto-radio: fetch similar artist tracks when queue ends
       const more = await searchTracks(currentTrack.artist, 'ytmusic');
       const fresh = more.filter((m) => !queue.some((q) => q.id === m.id)).slice(0, 5);
       if (fresh.length > 0) {
@@ -347,7 +401,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setSleepTimer: (minutes) => {
     if (!minutes || minutes <= 0) {
-      soundInstance?.setVolumeAsync(1.0);
+      soundInstance?.setVolumeAsync(get().loudnessNormEnabled ? 0.88 : 1.0);
       set({ sleepTimerEnd: null, sleepRemainingSec: 0 });
       return;
     }
@@ -470,10 +524,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     savePersistedSlice(get());
   },
 
+  removePlaylist: (playlistId) => {
+    set((s) => ({ playlists: s.playlists.filter((p) => p.id !== playlistId) }));
+    savePersistedSlice(get());
+  },
+
   addDownload: (track) => {
     set((s) => ({
       downloads: [track, ...s.downloads.filter((t) => t.id !== track.id)]
     }));
+    savePersistedSlice(get());
+  },
+
+  removeDownload: async (track) => {
+    await removeOfflineTrackFile(track);
+    set((s) => ({
+      downloads: s.downloads.filter((t) => t.id !== track.id)
+    }));
+    savePersistedSlice(get());
+  },
+
+  clearDownloads: async () => {
+    await clearAllOfflineFiles();
+    set({ downloads: [] });
     savePersistedSlice(get());
   },
 

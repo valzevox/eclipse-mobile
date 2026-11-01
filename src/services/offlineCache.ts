@@ -1,4 +1,4 @@
-// TypeScript / src/services/offlineCache.ts / Expo React Native / Offline Audio Caching & Local File Picker
+// TypeScript / src/services/offlineCache.ts / Expo React Native / Offline Audio Caching, Deletion & Local File Picker
 
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
@@ -30,6 +30,28 @@ export async function downloadTrackOffline(track: TrackItem): Promise<TrackItem 
     }
   } catch (_) {}
   return null;
+}
+
+export async function removeOfflineTrackFile(track: TrackItem): Promise<void> {
+  try {
+    if (track.localUri && track.localUri.includes('eclipse_cache')) {
+      const info = await FileSystem.getInfoAsync(track.localUri);
+      if (info.exists) {
+        await FileSystem.deleteAsync(track.localUri, { idempotent: true });
+      }
+    }
+  } catch (_) {}
+}
+
+export async function clearAllOfflineFiles(): Promise<void> {
+  try {
+    if (!FileSystem.documentDirectory) return;
+    const info = await FileSystem.getInfoAsync(CACHE_FOLDER);
+    if (info.exists) {
+      await FileSystem.deleteAsync(CACHE_FOLDER, { idempotent: true });
+    }
+    await ensureCacheDir();
+  } catch (_) {}
 }
 
 export async function pickLocalAudioFiles(): Promise<TrackItem[]> {

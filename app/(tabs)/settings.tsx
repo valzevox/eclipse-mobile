@@ -1,9 +1,9 @@
-// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, Translation Target, Scrobbler & Audio Settings
+// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, SponsorBlock, Loudness Norm & Presence Settings
 
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Globe, Sparkles, Languages, Radio } from 'lucide-react-native';
+import { Globe, Sparkles, Languages, Radio, Sliders } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { UI_LANGUAGES, tr } from '../../src/services/i18n';
 
@@ -16,12 +16,16 @@ export default function SettingsScreen() {
     wordSyncEnabled,
     romanizeEnabled,
     translateEnabled,
+    sponsorBlockEnabled,
+    loudnessNormEnabled,
     accentColor,
     scrobblerConfig,
     setScrobblerConfig,
     toggleWordSync,
     toggleRomanize,
-    toggleTranslate
+    toggleTranslate,
+    toggleSponsorBlock,
+    toggleLoudnessNorm
   } = usePlayerStore();
 
   return (
@@ -49,6 +53,31 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Sliders size={18} color={accentColor} />
+            <Text style={styles.cardTitle}>Audio Pro & SponsorBlock</Text>
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>SponsorBlock (Skip Intro / Outro / Non-Music)</Text>
+            <Switch
+              value={sponsorBlockEnabled}
+              onValueChange={toggleSponsorBlock}
+              trackColor={{ false: '#27272A', true: accentColor }}
+            />
+          </View>
+
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Loudness Normalization (EBU R128)</Text>
+            <Switch
+              value={loudnessNormEnabled}
+              onValueChange={toggleLoudnessNorm}
+              trackColor={{ false: '#27272A', true: accentColor }}
+            />
           </View>
         </View>
 
@@ -139,7 +168,7 @@ export default function SettingsScreen() {
             <Text style={styles.cardTitle}>Eclipse v1.0.0</Text>
           </View>
           <Text style={styles.aboutText}>
-            Powered by Innertube, SoundCloud, LRCLIB, NetEase YRC & KuGou. Built for iOS & Android.
+            Powered by Innertube, SoundCloud, SponsorBlock, LRCLIB, NetEase YRC, KuGou, ZingMP3 & Musixmatch. Built for iOS & Android.
           </Text>
         </View>
       </ScrollView>
@@ -177,7 +206,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 4
   },
-  toggleLabel: { color: '#E4E4E7', fontSize: 14, fontWeight: '500' },
+  toggleLabel: { color: '#E4E4E7', fontSize: 13, fontWeight: '500', flex: 1, paddingRight: 10 },
   input: {
     backgroundColor: '#1F1F26',
     color: '#FFF',

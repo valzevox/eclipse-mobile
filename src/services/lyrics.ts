@@ -1,8 +1,8 @@
-// TypeScript / src/services/lyrics.ts / Expo React Native / Multi-Source Synced Lyrics & Word-by-Word YRC/LRC
+// TypeScript / src/services/lyrics.ts / Expo React Native / Multi-Source Synced Lyrics (LRCLIB, NetEase YRC, KuGou, ZingMP3, Musixmatch)
 
 import { romanizeLyricsLines, translateLyricsLines } from './romanize';
 
-export type LyricsSource = 'lrclib' | 'netease' | 'kugou' | 'zingmp3';
+export type LyricsSource = 'lrclib' | 'netease' | 'kugou' | 'zingmp3' | 'musixmatch';
 
 export interface LyricWord {
   text: string;
@@ -23,7 +23,13 @@ function decodeBase64Utf8(b64: string): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
     let str = b64.replace(/=+$/, '');
     let output = '';
-    for (let bc = 0, bs = 0, buffer, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+    for (
+      let bc = 0, bs = 0, buffer, idx = 0;
+      (buffer = str.charAt(idx++));
+      ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4)
+        ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6))))
+        : 0
+    ) {
       buffer = chars.indexOf(buffer);
     }
     return decodeURIComponent(
@@ -186,7 +192,9 @@ async function fetchFromKuGou(cleanTitle: string, cleanArtist: string, duration?
   try {
     const durMs = Math.round((duration || 200) * 1000);
     const kw = encodeURIComponent(`${cleanArtist} - ${cleanTitle}`);
-    const sRes = await fetch(`https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${kw}&duration=${durMs}&hash=`);
+    const sRes = await fetch(
+      `https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${kw}&duration=${durMs}&hash=`
+    );
     if (!sRes.ok) return [];
     const sJson = await sRes.json();
     const cand = sJson?.candidates?.[0];
@@ -206,6 +214,42 @@ async function fetchFromKuGou(cleanTitle: string, cleanArtist: string, duration?
   return [];
 }
 
+async function fetchFromMusixmatch(cleanTitle: string, cleanArtist: string): Promise<LyricLine[]> {
+  try {
+    const qTrack = encodeURIComponent(cleanTitle);
+    const qArtist = encodeURIComponent(cleanArtist);
+    const macroUrl = `https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get?app_id=web-desktop-app-v1.0&q_track=${qTrack}&q_artist=${qArtist}`;
+    const res = await fetch(macroUrl);
+    if (res.ok) {
+      const data = await res.json();
+      const macro = data?.message?.body?.macro_calls;
+      const subList = macro?.['track.subtitles.get']?.message?.body?.subtitle_list;
+      const subBody = subList?.[0]?.subtitle?.subtitle_body;
+      if (subBody && typeof subBody === 'string') {
+        const parsed = parseLrc(subBody);
+        if (parsed.length > 0) return parsed;
+      }
+    }
+  } catch (_) {}
+  return [];
+}
+
+async function fetchFromZingMp3(cleanTitle: string, cleanArtist: string): Promise<LyricLine[]> {
+  try {
+    const q = encodeURIComponent(`${cleanTitle} ${cleanArtist}`.trim());
+    const res = await fetch(`https://ac.mp3.zing.vn/complete?type=artist,song,key,hub&num=5&query=${q}`);
+    if (res.ok) {
+      const data = await res.json();
+      const song = data?.data?.[0]?.song?.[0];
+      if (song?.name) {
+        const lrc = await fetchFromLrcLib(song.name, song.artist || cleanArtist);
+        if (lrc.length > 0) return lrc;
+      }
+    }
+  } catch (_) {}
+  return fetchFromLrcLib(cleanTitle, cleanArtist);
+}
+
 export async function fetchSyncedLyrics(
   title: string,
   artist: string,
@@ -221,12 +265,17 @@ export async function fetchSyncedLyrics(
   } else if (source === 'kugou') {
     const kg = await fetchFromKuGou(cleanTitle, cleanArtist, duration);
     if (kg.length > 0) return kg;
+  } else if (source === 'musixmatch') {
+    const mm = await fetchFromMusixmatch(cleanTitle, cleanArtist);
+    if (mm.length > 0) return mm;
+  } else if (source === 'zingmp3') {
+    const zm = await fetchFromZingMp3(cleanTitle, cleanArtist);
+    if (zm.length > 0) return zm;
   }
 
-  // Priority fallback chain (NetEase YRC word-sync -> LRCLIB -> KuGou)
+  // Priority fallback chain (LRCLIB + NetEase YRC word-sync -> Musixmatch -> KuGou)
   const lrc = await fetchFromLrcLib(cleanTitle, cleanArtist);
   if (lrc.length > 0) {
-    // If wordSync is desired and LRCLIB has no word timestamps, try enriching from NetEase YRC
     if (!lrc.some((l) => l.words && l.words.length > 0)) {
       const ne = await fetchFromNetEase(cleanTitle, cleanArtist, duration);
       if (ne.some((l) => l.words && l.words.length > 0)) return ne;
@@ -236,6 +285,9 @@ export async function fetchSyncedLyrics(
 
   const neFallback = await fetchFromNetEase(cleanTitle, cleanArtist, duration);
   if (neFallback.length > 0) return neFallback;
+
+  const mmFallback = await fetchFromMusixmatch(cleanTitle, cleanArtist);
+  if (mmFallback.length > 0) return mmFallback;
 
   const kgFallback = await fetchFromKuGou(cleanTitle, cleanArtist, duration);
   if (kgFallback.length > 0) return kgFallback;

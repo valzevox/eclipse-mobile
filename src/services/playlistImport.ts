@@ -1,4 +1,4 @@
-// TypeScript / src/services/playlistImport.ts / Expo React Native / Multi-Platform Playlist Importer (Spotify, YT Music, NetEase)
+// TypeScript / src/services/playlistImport.ts / Expo React Native / Multi-Platform Playlist Importer (Spotify, YT Music, Apple Music, Yandex, NetEase)
 
 import { TrackItem, searchTracks } from './innertube';
 
@@ -53,7 +53,74 @@ export async function importExternalPlaylist(urlOrText: string): Promise<Importe
     } catch (_) {}
   }
 
-  // 2. YouTube / YouTube Music Playlist URL (list=PL...)
+  // 2. Apple Music Album / Playlist URL (music.apple.com)
+  const appleAlbumMatch = raw.match(/music\.apple\.com\/(?:[a-z]{2}\/)?album\/(?:[^/]+\/)?(\d+)/i);
+  if (appleAlbumMatch) {
+    try {
+      const res = await fetch(`https://itunes.apple.com/lookup?id=${appleAlbumMatch[1]}&entity=song`);
+      if (res.ok) {
+        const data = await res.json();
+        const results = Array.isArray(data?.results) ? data.results : [];
+        const col = results.find((r: any) => r.wrapperType === 'collection');
+        const songs = results.filter((r: any) => r.wrapperType === 'track');
+        if (songs.length > 0) {
+          const tracks: TrackItem[] = songs.slice(0, 40).map((item: any, idx: number) => ({
+            id: `am_${item.trackId || idx}`,
+            title: item.trackName || 'Unknown Track',
+            artist: item.artistName || col?.artistName || 'Unknown Artist',
+            duration: item.trackTimeMillis ? Math.round(item.trackTimeMillis / 1000) : 200,
+            thumbnail:
+              (item.artworkUrl100 || col?.artworkUrl100 || '').replace('100x100', '600x600') ||
+              'https://i.ytimg.com/vi/Y8JFxS1HlDo/hqdefault.jpg',
+            platform: 'ytmusic'
+          }));
+          return {
+            id,
+            name: col?.collectionName || 'Apple Music Album',
+            tracks,
+            createdAt: Date.now()
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Yandex Music Playlist URL (music.yandex.ru / music.yandex.com)
+  const ymUsers = raw.match(/music\.yandex\.[a-z]+\/users\/([^/?#]+)\/playlists\/(\d+)/i);
+  if (ymUsers) {
+    try {
+      const res = await fetch(`https://api.music.yandex.net/users/${ymUsers[1]}/playlists/${ymUsers[2]}`);
+      if (res.ok) {
+        const data = await res.json();
+        const r = data?.result || data;
+        const rawTracks = Array.isArray(r?.tracks) ? r.tracks : [];
+        if (rawTracks.length > 0) {
+          const tracks: TrackItem[] = rawTracks.slice(0, 40).map((item: any, idx: number) => {
+            const t = item.track || item;
+            const coverUri = t.ogImage || t.coverUri || t.albums?.[0]?.coverUri || '';
+            return {
+              id: `ym_${t.id || idx}`,
+              title: t.title || 'Unknown Track',
+              artist: Array.isArray(t.artists) ? t.artists.map((a: any) => a.name).join(', ') : 'Unknown Artist',
+              duration: t.durationMs ? Math.round(t.durationMs / 1000) : 200,
+              thumbnail: coverUri
+                ? `https://${coverUri.replace('%%', '400x400')}`
+                : 'https://i.ytimg.com/vi/Y8JFxS1HlDo/hqdefault.jpg',
+              platform: 'ytmusic'
+            };
+          });
+          return {
+            id,
+            name: r?.title || 'Yandex Music Playlist',
+            tracks,
+            createdAt: Date.now()
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 4. YouTube / YouTube Music Playlist URL (list=PL...)
   const ytListMatch = raw.match(/[?&]list=([a-zA-Z0-9_-]+)/);
   if (ytListMatch) {
     const listId = ytListMatch[1];
@@ -85,7 +152,7 @@ export async function importExternalPlaylist(urlOrText: string): Promise<Importe
     }
   }
 
-  // 3. NetEase Cloud Music Playlist URL (music.163.com/...id=12345)
+  // 5. NetEase Cloud Music Playlist URL (music.163.com/...id=12345)
   const neMatch = raw.match(/music\.163\.com.*[?&]id=(\d+)/);
   if (neMatch) {
     const neId = neMatch[1];

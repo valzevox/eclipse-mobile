@@ -51,7 +51,13 @@ export function LyricsView() {
   }, [activeIndex]);
 
   const cycleSource = () => {
-    const order: ('lrclib' | 'netease' | 'kugou' | 'zingmp3')[] = ['lrclib', 'netease', 'kugou', 'zingmp3'];
+    const order: ('lrclib' | 'netease' | 'kugou' | 'zingmp3' | 'musixmatch')[] = [
+      'lrclib',
+      'netease',
+      'kugou',
+      'zingmp3',
+      'musixmatch'
+    ];
     const next = order[(order.indexOf(lyricsSource) + 1) % order.length];
     setLyricsSource(next);
   };
