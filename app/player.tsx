@@ -12,9 +12,11 @@ import {
   SkipForward,
   Heart,
   Sliders,
+  Download,
   MessageSquareQuote
 } from 'lucide-react-native';
 import { usePlayerStore } from '../src/store/usePlayerStore';
+import { downloadTrackOffline } from '../src/services/offlineCache';
 import { LyricsView } from '../src/components/LyricsView';
 import { AudioFxModal } from '../src/components/AudioFxModal';
 import { tr } from '../src/services/i18n';
@@ -34,16 +36,19 @@ export default function PlayerScreen() {
     position,
     duration,
     favorites,
+    downloads,
     uiLang,
     togglePlayPause,
     nextTrack,
     prevTrack,
     seekTo,
-    toggleFavorite
+    toggleFavorite,
+    addDownload
   } = usePlayerStore();
 
   const [showLyrics, setShowLyrics] = useState(true);
   const [showFx, setShowFx] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   if (!currentTrack) {
     return (
@@ -56,7 +61,16 @@ export default function PlayerScreen() {
   }
 
   const isFav = favorites.some((t) => t.id === currentTrack.id);
+  const isDownloaded = downloads.some((t) => t.id === currentTrack.id);
   const progress = duration > 0 ? Math.min(1, position / duration) : 0;
+
+  const handleDownload = async () => {
+    if (downloading || isDownloaded) return;
+    setDownloading(true);
+    const cached = await downloadTrackOffline(currentTrack);
+    if (cached) addDownload(cached);
+    setDownloading(false);
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -99,6 +113,9 @@ export default function PlayerScreen() {
                     {currentTrack.artist}
                   </Text>
                 </View>
+                <TouchableOpacity onPress={handleDownload} style={styles.iconBtn}>
+                  <Download size={20} color={isDownloaded ? '#10B981' : '#A1A1AA'} />
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => toggleFavorite(currentTrack)} style={styles.iconBtn}>
                   <Heart size={22} color={isFav ? '#FF4D6D' : '#A1A1AA'} fill={isFav ? '#FF4D6D' : 'none'} />
                 </TouchableOpacity>

@@ -1,5 +1,7 @@
 // TypeScript / src/services/innertube.ts / Expo React Native / YouTube Music & SoundCloud Resolver
 
+import { searchSoundCloud, resolveSoundCloudStream } from './soundcloud';
+
 export interface TrackItem {
   id: string;
   title: string;
@@ -30,6 +32,10 @@ export async function searchTracks(
   platform: 'ytmusic' | 'youtube' | 'soundcloud' = 'ytmusic'
 ): Promise<TrackItem[]> {
   if (!query || !query.trim()) return [];
+  if (platform === 'soundcloud') {
+    const scResults = await searchSoundCloud(query);
+    if (scResults.length > 0) return scResults;
+  }
   const q = encodeURIComponent(query.trim());
 
   // 1. Try Piped API (fast, no API key, supports music_songs filter)
@@ -85,6 +91,10 @@ export async function searchTracks(
 
 export async function resolveStreamUrl(track: TrackItem): Promise<string> {
   if (track.localUri) return track.localUri;
+  if (track.platform === 'soundcloud' && track.streamUrl) {
+    const resolved = await resolveSoundCloudStream(track.streamUrl);
+    if (resolved) return resolved;
+  }
   if (track.streamUrl) return track.streamUrl;
 
   // Try Piped audio streams

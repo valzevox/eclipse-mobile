@@ -1,15 +1,18 @@
-// TypeScript / app/(tabs)/library.tsx / Expo React Native / Favorites & External Playlist Import
+// TypeScript / app/(tabs)/library.tsx / Expo React Native / Favorites, Downloads, Local Files & Playlists
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, PlusCircle, Play, ListMusic } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Heart, PlusCircle, Play, ListMusic, Download, FolderOpen } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { importExternalPlaylist } from '../../src/services/playlistImport';
+import { pickLocalAudioFiles } from '../../src/services/offlineCache';
 import { tr } from '../../src/services/i18n';
 
 export default function LibraryScreen() {
-  const { favorites, playlists, playTrack, addPlaylist, uiLang } = usePlayerStore();
+  const router = useRouter();
+  const { favorites, downloads, localFiles, playlists, playTrack, addPlaylist, addLocalFiles, uiLang } = usePlayerStore();
   const [importInput, setImportInput] = useState('');
   const [importing, setImporting] = useState(false);
 
@@ -22,10 +25,23 @@ export default function LibraryScreen() {
     setImporting(false);
   };
 
+  const handlePickLocal = async () => {
+    const picked = await pickLocalAudioFiles();
+    if (picked.length > 0) {
+      addLocalFiles(picked);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>{tr(uiLang, 'library')}</Text>
+        <View style={styles.topRow}>
+          <Text style={styles.title}>{tr(uiLang, 'library')}</Text>
+          <TouchableOpacity style={styles.localBtn} onPress={handlePickLocal}>
+            <FolderOpen size={16} color="#B69DF8" />
+            <Text style={styles.localBtnText}>Local Files ({localFiles.length})</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.importCard}>
           <Text style={styles.importLabel}>{tr(uiLang, 'importPlaylist')}</Text>
@@ -65,7 +81,51 @@ export default function LibraryScreen() {
           </TouchableOpacity>
         ))}
 
-        <View style={[styles.sectionHeader, { marginTop: 22 }]}>
+        <View style={[styles.sectionHeader, { marginTop: 18 }]}>
+          <Download size={18} color="#10B981" />
+          <Text style={styles.sectionTitle}>
+            {tr(uiLang, 'downloads')} ({downloads.length})
+          </Text>
+        </View>
+        {downloads.map((item) => (
+          <TouchableOpacity key={`dl_${item.id}`} style={styles.row} onPress={() => playTrack(item, downloads)}>
+            <Image source={{ uri: item.thumbnail }} style={styles.art} />
+            <View style={styles.meta}>
+              <Text style={styles.trackTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={styles.trackArtist} numberOfLines={1}>
+                {item.artist}
+              </Text>
+            </View>
+            <Play size={18} color="#10B981" />
+          </TouchableOpacity>
+        ))}
+
+        {localFiles.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 18 }]}>
+              <FolderOpen size={18} color="#B69DF8" />
+              <Text style={styles.sectionTitle}>Local Audio ({localFiles.length})</Text>
+            </View>
+            {localFiles.map((item) => (
+              <TouchableOpacity key={item.id} style={styles.row} onPress={() => playTrack(item, localFiles)}>
+                <Image source={{ uri: item.thumbnail }} style={styles.art} />
+                <View style={styles.meta}>
+                  <Text style={styles.trackTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.trackArtist} numberOfLines={1}>
+                    {item.artist}
+                  </Text>
+                </View>
+                <Play size={18} color="#B69DF8" />
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
+
+        <View style={[styles.sectionHeader, { marginTop: 18 }]}>
           <ListMusic size={18} color="#B69DF8" />
           <Text style={styles.sectionTitle}>
             {tr(uiLang, 'playlists')} ({playlists.length})
@@ -75,7 +135,7 @@ export default function LibraryScreen() {
           <TouchableOpacity
             key={pl.id}
             style={styles.plCard}
-            onPress={() => pl.tracks[0] && playTrack(pl.tracks[0], pl.tracks)}
+            onPress={() => router.push(`/playlist/${pl.id}`)}
           >
             <View style={styles.meta}>
               <Text style={styles.trackTitle}>{pl.name}</Text>
@@ -93,7 +153,20 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#09090B' },
   container: { flex: 1 },
   content: { padding: 18, paddingBottom: 130, gap: 10 },
-  title: { color: '#FFF', fontSize: 26, fontWeight: '800', marginBottom: 8 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  title: { color: '#FFF', fontSize: 26, fontWeight: '800' },
+  localBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#18181F',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: 'rgba(182, 157, 248, 0.25)'
+  },
+  localBtnText: { color: '#B69DF8', fontSize: 12, fontWeight: '600' },
   importCard: {
     backgroundColor: '#141418',
     borderRadius: 18,

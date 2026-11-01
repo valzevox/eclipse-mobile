@@ -13,6 +13,8 @@ interface PlayerState {
   currentTrack: TrackItem | null;
   queue: TrackItem[];
   favorites: TrackItem[];
+  downloads: TrackItem[];
+  localFiles: TrackItem[];
   playlists: ImportedPlaylist[];
   history: TrackItem[];
   isPlaying: boolean;
@@ -49,6 +51,8 @@ interface PlayerState {
   setTempoAndPitch: (tempo: number, pitch: number) => Promise<void>;
   setTrimRange: (start: number, end: number) => void;
   addPlaylist: (pl: ImportedPlaylist) => void;
+  addDownload: (track: TrackItem) => void;
+  addLocalFiles: (tracks: TrackItem[]) => void;
 }
 
 let soundInstance: Audio.Sound | null = null;
@@ -57,6 +61,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: getDefaultTrendingTracks()[0],
   queue: getDefaultTrendingTracks(),
   favorites: [],
+  downloads: [],
+  localFiles: [],
   playlists: [],
   history: [],
   isPlaying: false,
@@ -279,5 +285,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setTrimRange: (start, end) => set({ trimStart: start, trimEnd: end }),
 
-  addPlaylist: (pl) => set((s) => ({ playlists: [pl, ...s.playlists] }))
+  addPlaylist: (pl) => set((s) => ({ playlists: [pl, ...s.playlists] })),
+
+  addDownload: (track) =>
+    set((s) => ({
+      downloads: [track, ...s.downloads.filter((t) => t.id !== track.id)]
+    })),
+
+  addLocalFiles: (tracks) =>
+    set((s) => ({
+      localFiles: [...tracks, ...s.localFiles]
+    }))
 }));
