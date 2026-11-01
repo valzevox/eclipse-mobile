@@ -51,7 +51,9 @@ jobs:
           if [ -z "$TAG_VER" ] || [ "$TAG_VER" = "main" ]; then
             TAG_VER="v1.0.0"
           fi
-          cp android/app/build/outputs/apk/release/*-unsigned.apk build-artifacts/eclipse-mobile-${TAG_VER}.apk || cp android/app/build/outputs/apk/release/*.apk build-artifacts/eclipse-mobile-${TAG_VER}.apk
+          APK_SRC=$(find android/app/build/outputs/apk/release -type f -name "*.apk" | head -n 1)
+          echo "Found APK at: $APK_SRC"
+          cp "$APK_SRC" "build-artifacts/eclipse-mobile-${TAG_VER}.apk"
           ls -la build-artifacts/
 
       - name: Create / Update GitHub Release
