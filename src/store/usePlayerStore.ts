@@ -1,13 +1,26 @@
-// TypeScript / src/store/usePlayerStore.ts / Expo React Native / Zustand Audio & Lyrics Store
+// TypeScript / src/store/usePlayerStore.ts / Expo React Native / Zustand Audio, Persistence, Sleep Timer & Dynamic Theme Store
 
 import { create } from 'zustand';
 import { Audio } from 'expo-av';
-import { TrackItem, getDefaultTrendingTracks, resolveStreamUrl } from '../services/innertube';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TrackItem, getDefaultTrendingTracks, resolveStreamUrl, searchTracks } from '../services/innertube';
 import { LyricLine, LyricsSource, fetchSyncedLyrics, enrichLyricsWithTranslationAndRomaji } from '../services/lyrics';
 import { LangCode } from '../services/i18n';
 import { ImportedPlaylist } from '../services/playlistImport';
 
 export type AudioPreset = 'normal' | 'nightcore' | 'slowed';
+export type RepeatMode = 'off' | 'all' | 'one';
+
+const ACCENT_PALETTE = ['#B69DF8', '#38BDF8', '#34D399', '#F472B6', '#FBBF24', '#A78BFA', '#FB7185'];
+
+export function deriveTrackAccent(trackId: string): string {
+  if (!trackId) return '#B69DF8';
+  let hash = 0;
+  for (let i = 0; i < trackId.length; i++) {
+    hash = (hash * 31 + trackId.charCodeAt(i)) >>> 0;
+  }
+  return ACCENT_PALETTE[hash % ACCENT_PALETTE.length];
+}
 
 interface PlayerState {
   currentTrack: TrackItem | null;
@@ -33,15 +46,27 @@ interface PlayerState {
   preset: AudioPreset;
   trimStart: number;
   trimEnd: number;
+  shuffleEnabled: boolean;
+  repeatMode: RepeatMode;
+  sleepTimerEnd: number | null;
+  sleepRemainingSec: number;
+  accentColor: string;
   totalSecondsListened: number;
+  hydrated: boolean;
 
+  hydrateStore: () => Promise<void>;
   playTrack: (track: TrackItem, newQueue?: TrackItem[]) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   seekTo: (seconds: number) => Promise<void>;
   nextTrack: () => Promise<void>;
   prevTrack: () => Promise<void>;
+  toggleShuffle: () => void;
+  cycleRepeatMode: () => void;
+  setSleepTimer: (minutes: number | null) => void;
+  removeFromQueue: (trackId: string) => void;
   toggleFavorite: (track: TrackItem) => void;
   setUiLang: (lang: LangCode) => void;
+  setTranslationLang: (lang: string) => Promise<void>;
   setLyricsSource: (source: LyricsSource) => Promise<void>;
   adjustLyricsOffset: (delta: number) => void;
   toggleWordSync: () => void;
@@ -56,6 +81,26 @@ interface PlayerState {
 }
 
 let soundInstance: Audio.Sound | null = null;
+const STORAGE_KEY = '@eclipse_mobile_state_v1';
+
+async function savePersistedSlice(state: Partial<PlayerState>) {
+  try {
+    const payload = JSON.stringify({
+      favorites: state.favorites,
+      downloads: state.downloads,
+      localFiles: state.localFiles,
+      playlists: state.playlists,
+      history: state.history,
+      uiLang: state.uiLang,
+      translationLang: state.translationLang,
+      wordSyncEnabled: state.wordSyncEnabled,
+      romanizeEnabled: state.romanizeEnabled,
+      translateEnabled: state.translateEnabled,
+      totalSecondsListened: state.totalSecondsListened
+    });
+    await AsyncStorage.setItem(STORAGE_KEY, payload);
+  } catch (_) {}
+}
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: getDefaultTrendingTracks()[0],
@@ -81,7 +126,39 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   preset: 'normal',
   trimStart: 0,
   trimEnd: 0,
+  shuffleEnabled: false,
+  repeatMode: 'off',
+  sleepTimerEnd: null,
+  sleepRemainingSec: 0,
+  accentColor: '#B69DF8',
   totalSecondsListened: 1420,
+  hydrated: false,
+
+  hydrateStore: async () => {
+    if (get().hydrated) return;
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        set({
+          favorites: Array.isArray(data.favorites) ? data.favorites : [],
+          downloads: Array.isArray(data.downloads) ? data.downloads : [],
+          localFiles: Array.isArray(data.localFiles) ? data.localFiles : [],
+          playlists: Array.isArray(data.playlists) ? data.playlists : [],
+          history: Array.isArray(data.history) ? data.history : [],
+          uiLang: data.uiLang || 'vi',
+          translationLang: data.translationLang || 'vi',
+          wordSyncEnabled: typeof data.wordSyncEnabled === 'boolean' ? data.wordSyncEnabled : true,
+          romanizeEnabled: typeof data.romanizeEnabled === 'boolean' ? data.romanizeEnabled : true,
+          translateEnabled: typeof data.translateEnabled === 'boolean' ? data.translateEnabled : false,
+          totalSecondsListened: typeof data.totalSecondsListened === 'number' ? data.totalSecondsListened : 1420,
+          hydrated: true
+        });
+        return;
+      }
+    } catch (_) {}
+    set({ hydrated: true });
+  },
 
   playTrack: async (track, newQueue) => {
     try {
@@ -97,6 +174,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const updatedQueue = newQueue || get().queue;
     const hist = [track, ...get().history.filter((t) => t.id !== track.id)].slice(0, 50);
+    const accentColor = deriveTrackAccent(track.id);
 
     set({
       currentTrack: track,
@@ -107,10 +185,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       duration: track.duration || 180,
       trimStart: 0,
       trimEnd: track.duration || 180,
+      accentColor,
       lyrics: []
     });
+    savePersistedSlice(get());
 
-    // Load synced lyrics + Romanization / Translation
     const { lyricsSource, romanizeEnabled, translateEnabled, translationLang } = get();
     fetchSyncedLyrics(track.title, track.artist, track.duration, lyricsSource).then(async (rawLines) => {
       const enriched = await enrichLyricsWithTranslationAndRomaji(
@@ -132,19 +211,41 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           if (!status.isLoaded) return;
           const posSec = status.positionMillis / 1000;
           const durSec = (status.durationMillis || track.duration * 1000) / 1000;
-          const { trimEnd } = get();
+          const { trimEnd, sleepTimerEnd } = get();
+
+          if (sleepTimerEnd) {
+            const rem = Math.max(0, Math.round((sleepTimerEnd - Date.now()) / 1000));
+            if (rem <= 0) {
+              soundInstance?.pauseAsync();
+              soundInstance?.setVolumeAsync(1.0);
+              set({ isPlaying: false, sleepTimerEnd: null, sleepRemainingSec: 0 });
+              return;
+            }
+            if (rem <= 10) {
+              soundInstance?.setVolumeAsync(Math.max(0.1, rem / 10));
+            }
+            set({ sleepRemainingSec: rem });
+          }
+
           if (trimEnd > 0 && posSec >= trimEnd && durSec > 0 && trimEnd < durSec) {
             soundInstance?.setPositionAsync(get().trimStart * 1000);
             return;
           }
+
           set((state) => ({
             position: posSec,
             duration: durSec,
             isPlaying: status.isPlaying,
             totalSecondsListened: state.totalSecondsListened + (status.isPlaying ? 0.25 : 0)
           }));
+
           if (status.didJustFinish) {
-            get().nextTrack();
+            if (get().repeatMode === 'one') {
+              soundInstance?.setPositionAsync(0);
+              soundInstance?.playAsync();
+            } else {
+              get().nextTrack();
+            }
           }
         }
       );
@@ -180,9 +281,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   nextTrack: async () => {
-    const { queue, currentTrack } = get();
+    const { queue, currentTrack, shuffleEnabled } = get();
     if (!queue.length || !currentTrack) return;
+    if (shuffleEnabled && queue.length > 1) {
+      const candidates = queue.filter((t) => t.id !== currentTrack.id);
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      await get().playTrack(chosen);
+      return;
+    }
     const idx = queue.findIndex((t) => t.id === currentTrack.id);
+    if (idx === queue.length - 1 && get().repeatMode === 'off') {
+      // Endless My Wave auto-radio: fetch similar artist tracks when queue ends
+      const more = await searchTracks(currentTrack.artist, 'ytmusic');
+      const fresh = more.filter((m) => !queue.some((q) => q.id === m.id)).slice(0, 5);
+      if (fresh.length > 0) {
+        const expanded = [...queue, ...fresh];
+        await get().playTrack(fresh[0], expanded);
+        return;
+      }
+    }
     const next = queue[(idx + 1) % queue.length];
     await get().playTrack(next);
   },
@@ -199,15 +316,53 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     await get().playTrack(prev);
   },
 
+  toggleShuffle: () => set((s) => ({ shuffleEnabled: !s.shuffleEnabled })),
+
+  cycleRepeatMode: () =>
+    set((s) => {
+      const order: RepeatMode[] = ['off', 'all', 'one'];
+      const next = order[(order.indexOf(s.repeatMode) + 1) % order.length];
+      return { repeatMode: next };
+    }),
+
+  setSleepTimer: (minutes) => {
+    if (!minutes || minutes <= 0) {
+      soundInstance?.setVolumeAsync(1.0);
+      set({ sleepTimerEnd: null, sleepRemainingSec: 0 });
+      return;
+    }
+    const end = Date.now() + minutes * 60 * 1000;
+    set({ sleepTimerEnd: end, sleepRemainingSec: minutes * 60 });
+  },
+
+  removeFromQueue: (trackId) =>
+    set((s) => ({
+      queue: s.queue.filter((t) => t.id !== trackId)
+    })),
+
   toggleFavorite: (track) => {
     const { favorites } = get();
     const exists = favorites.some((t) => t.id === track.id);
     set({
       favorites: exists ? favorites.filter((t) => t.id !== track.id) : [track, ...favorites]
     });
+    savePersistedSlice(get());
   },
 
-  setUiLang: (lang) => set({ uiLang: lang }),
+  setUiLang: (lang) => {
+    set({ uiLang: lang });
+    savePersistedSlice(get());
+  },
+
+  setTranslationLang: async (lang) => {
+    set({ translationLang: lang });
+    savePersistedSlice(get());
+    const { lyrics, romanizeEnabled, translateEnabled } = get();
+    if (lyrics.length && translateEnabled) {
+      const enriched = await enrichLyricsWithTranslationAndRomaji(lyrics, romanizeEnabled, lang);
+      set({ lyrics: enriched });
+    }
+  },
 
   setLyricsSource: async (source) => {
     set({ lyricsSource: source });
@@ -226,11 +381,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set((s) => ({ lyricsOffset: Math.round((s.lyricsOffset + delta) * 10) / 10 }));
   },
 
-  toggleWordSync: () => set((s) => ({ wordSyncEnabled: !s.wordSyncEnabled })),
+  toggleWordSync: () => {
+    set((s) => ({ wordSyncEnabled: !s.wordSyncEnabled }));
+    savePersistedSlice(get());
+  },
 
   toggleRomanize: async () => {
     const nextVal = !get().romanizeEnabled;
     set({ romanizeEnabled: nextVal });
+    savePersistedSlice(get());
     const { lyrics, translateEnabled, translationLang } = get();
     if (lyrics.length) {
       const enriched = await enrichLyricsWithTranslationAndRomaji(
@@ -245,6 +404,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleTranslate: async () => {
     const nextVal = !get().translateEnabled;
     set({ translateEnabled: nextVal });
+    savePersistedSlice(get());
     const { lyrics, romanizeEnabled, translationLang } = get();
     if (lyrics.length) {
       const enriched = await enrichLyricsWithTranslationAndRomaji(
@@ -285,15 +445,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setTrimRange: (start, end) => set({ trimStart: start, trimEnd: end }),
 
-  addPlaylist: (pl) => set((s) => ({ playlists: [pl, ...s.playlists] })),
+  addPlaylist: (pl) => {
+    set((s) => ({ playlists: [pl, ...s.playlists] }));
+    savePersistedSlice(get());
+  },
 
-  addDownload: (track) =>
+  addDownload: (track) => {
     set((s) => ({
       downloads: [track, ...s.downloads.filter((t) => t.id !== track.id)]
-    })),
+    }));
+    savePersistedSlice(get());
+  },
 
-  addLocalFiles: (tracks) =>
+  addLocalFiles: (tracks) => {
     set((s) => ({
       localFiles: [...tracks, ...s.localFiles]
-    }))
+    }));
+    savePersistedSlice(get());
+  }
 }));

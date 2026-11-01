@@ -1,6 +1,6 @@
-// TypeScript / app/(tabs)/_layout.tsx / Expo React Native / Bottom Tab Navigation
+// TypeScript / app/(tabs)/_layout.tsx / Expo React Native / Bottom Tab Navigation & Store Hydration
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Home, Search, Library, BarChart2, Settings } from 'lucide-react-native';
@@ -9,7 +9,11 @@ import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { tr } from '../../src/services/i18n';
 
 export default function TabsLayout() {
-  const { uiLang } = usePlayerStore();
+  const { uiLang, accentColor, hydrateStore } = usePlayerStore();
+
+  useEffect(() => {
+    hydrateStore();
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -17,7 +21,7 @@ export default function TabsLayout() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: '#B69DF8',
+          tabBarActiveTintColor: accentColor,
           tabBarInactiveTintColor: '#71717A',
           tabBarLabelStyle: { fontSize: 11, fontWeight: '600' }
         }}

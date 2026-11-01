@@ -1,8 +1,8 @@
-// TypeScript / src/components/AudioFxModal.tsx / Expo React Native / Tempo, Pitch & Trim Controls
+// TypeScript / src/components/AudioFxModal.tsx / Expo React Native / Tempo, Pitch, Sleep Timer & Trim Controls
 
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { X } from 'lucide-react-native';
+import { X, Moon } from 'lucide-react-native';
 import { usePlayerStore, AudioPreset } from '../store/usePlayerStore';
 import { tr } from '../services/i18n';
 
@@ -12,8 +12,21 @@ interface Props {
 }
 
 export function AudioFxModal({ visible, onClose }: Props) {
-  const { preset, tempo, pitch, trimStart, trimEnd, duration, uiLang, setAudioPreset, setTempoAndPitch, setTrimRange } =
-    usePlayerStore();
+  const {
+    preset,
+    tempo,
+    pitch,
+    trimStart,
+    trimEnd,
+    duration,
+    uiLang,
+    sleepRemainingSec,
+    accentColor,
+    setAudioPreset,
+    setTempoAndPitch,
+    setTrimRange,
+    setSleepTimer
+  } = usePlayerStore();
   const [startStr, setStartStr] = useState(String(Math.floor(trimStart)));
   const [endStr, setEndStr] = useState(String(Math.floor(trimEnd || duration)));
 
@@ -28,6 +41,13 @@ export function AudioFxModal({ visible, onClose }: Props) {
     { key: 'normal', label: tr(uiLang, 'normal') },
     { key: 'nightcore', label: tr(uiLang, 'nightcore') },
     { key: 'slowed', label: tr(uiLang, 'slowedReverb') }
+  ];
+
+  const sleepOptions: { min: number | null; label: string }[] = [
+    { min: null, label: 'Off' },
+    { min: 15, label: '15m' },
+    { min: 30, label: '30m' },
+    { min: 60, label: '60m' }
   ];
 
   return (
@@ -47,7 +67,10 @@ export function AudioFxModal({ visible, onClose }: Props) {
               <TouchableOpacity
                 key={p.key}
                 onPress={() => setAudioPreset(p.key)}
-                style={[styles.presetChip, preset === p.key && styles.presetChipActive]}
+                style={[
+                  styles.presetChip,
+                  preset === p.key && { backgroundColor: accentColor }
+                ]}
               >
                 <Text style={[styles.presetText, preset === p.key && styles.presetTextActive]}>{p.label}</Text>
               </TouchableOpacity>
@@ -62,13 +85,40 @@ export function AudioFxModal({ visible, onClose }: Props) {
               <TouchableOpacity
                 key={val}
                 onPress={() => setTempoAndPitch(val, val)}
-                style={[styles.stepBtn, Math.abs(tempo - val) < 0.02 && styles.presetChipActive]}
+                style={[
+                  styles.stepBtn,
+                  Math.abs(tempo - val) < 0.02 && { backgroundColor: accentColor }
+                ]}
               >
                 <Text style={[styles.presetText, Math.abs(tempo - val) < 0.02 && styles.presetTextActive]}>
                   {val}x
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+
+          <View style={styles.sleepHeader}>
+            <Moon size={15} color={accentColor} />
+            <Text style={styles.sectionLabel}>
+              {tr(uiLang, 'sleepTimer')}
+              {sleepRemainingSec > 0 ? ` (${Math.ceil(sleepRemainingSec / 60)}m left)` : ''}
+            </Text>
+          </View>
+          <View style={styles.presetRow}>
+            {sleepOptions.map((opt) => {
+              const active =
+                (opt.min === null && sleepRemainingSec === 0) ||
+                (opt.min !== null && Math.abs(sleepRemainingSec - opt.min * 60) < 120);
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  onPress={() => setSleepTimer(opt.min)}
+                  style={[styles.presetChip, active && { backgroundColor: accentColor }]}
+                >
+                  <Text style={[styles.presetText, active && styles.presetTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <Text style={styles.sectionLabel}>Trim Loop Range (Seconds)</Text>
@@ -91,7 +141,7 @@ export function AudioFxModal({ visible, onClose }: Props) {
                 onChangeText={setEndStr}
               />
             </View>
-            <TouchableOpacity onPress={applyTrim} style={styles.applyBtn}>
+            <TouchableOpacity onPress={applyTrim} style={[styles.applyBtn, { backgroundColor: accentColor }]}>
               <Text style={styles.applyText}>Save</Text>
             </TouchableOpacity>
           </View>
@@ -112,7 +162,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 22,
-    gap: 14
+    gap: 12
   },
   header: {
     flexDirection: 'row',
@@ -122,6 +172,7 @@ const styles = StyleSheet.create({
   title: { color: '#FFF', fontSize: 18, fontWeight: '700' },
   closeBtn: { padding: 4 },
   sectionLabel: { color: '#A1A1AA', fontSize: 13, fontWeight: '600', marginTop: 4 },
+  sleepHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   presetRow: { flexDirection: 'row', gap: 8 },
   stepRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   presetChip: {
@@ -137,7 +188,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#27272A'
   },
-  presetChipActive: { backgroundColor: '#B69DF8' },
   presetText: { color: '#E4E4E7', fontSize: 13, fontWeight: '600' },
   presetTextActive: { color: '#09090B', fontWeight: '700' },
   trimRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
@@ -152,7 +202,6 @@ const styles = StyleSheet.create({
     fontSize: 14
   },
   applyBtn: {
-    backgroundColor: '#B69DF8',
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12

@@ -1,7 +1,7 @@
-// TypeScript / app/player.tsx / Expo React Native / Fullscreen Player & Synced Lyrics Modal
+// TypeScript / app/player.tsx / Expo React Native / Fullscreen Player, AMLL Synced Lyrics & Up Next Queue
 
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -13,7 +13,10 @@ import {
   Heart,
   Sliders,
   Download,
-  MessageSquareQuote
+  Shuffle,
+  Repeat,
+  Repeat1,
+  Trash2
 } from 'lucide-react-native';
 import { usePlayerStore } from '../src/store/usePlayerStore';
 import { downloadTrackOffline } from '../src/services/offlineCache';
@@ -32,21 +35,30 @@ export default function PlayerScreen() {
   const router = useRouter();
   const {
     currentTrack,
+    queue,
     isPlaying,
     position,
     duration,
     favorites,
     downloads,
     uiLang,
+    shuffleEnabled,
+    repeatMode,
+    accentColor,
+    sleepRemainingSec,
+    playTrack,
     togglePlayPause,
     nextTrack,
     prevTrack,
     seekTo,
+    toggleShuffle,
+    cycleRepeatMode,
+    removeFromQueue,
     toggleFavorite,
     addDownload
   } = usePlayerStore();
 
-  const [showLyrics, setShowLyrics] = useState(true);
+  const [tab, setTab] = useState<'cover' | 'lyrics' | 'queue'>('lyrics');
   const [showFx, setShowFx] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -80,28 +92,28 @@ export default function PlayerScreen() {
             <ChevronDown size={26} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.modeTabs}>
-            <TouchableOpacity
-              onPress={() => setShowLyrics(false)}
-              style={[styles.modeTab, !showLyrics && styles.modeTabActive]}
-            >
-              <Text style={[styles.modeTabText, !showLyrics && styles.modeTabTextActive]}>Cover</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowLyrics(true)}
-              style={[styles.modeTab, showLyrics && styles.modeTabActive]}
-            >
-              <Text style={[styles.modeTabText, showLyrics && styles.modeTabTextActive]}>
-                {tr(uiLang, 'lyrics')}
-              </Text>
-            </TouchableOpacity>
+            {(['cover', 'lyrics', 'queue'] as const).map((key) => {
+              const active = tab === key;
+              const label =
+                key === 'cover' ? 'Cover' : key === 'lyrics' ? tr(uiLang, 'lyrics') : `Queue (${queue.length})`;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setTab(key)}
+                  style={[styles.modeTab, active && { backgroundColor: accentColor }]}
+                >
+                  <Text style={[styles.modeTabText, active && styles.modeTabTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
           <TouchableOpacity onPress={() => setShowFx(true)} style={styles.iconBtn}>
-            <Sliders size={20} color="#B69DF8" />
+            <Sliders size={20} color={accentColor} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.body}>
-          {showLyrics ? (
+          {tab === 'lyrics' ? (
             <View style={styles.lyricsWrap}>
               <View style={styles.compactHeader}>
                 <Image source={{ uri: currentTrack.thumbnail }} style={styles.compactArt} />
@@ -122,6 +134,34 @@ export default function PlayerScreen() {
               </View>
               <LyricsView />
             </View>
+          ) : tab === 'queue' ? (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
+              {queue.map((item) => {
+                const active = item.id === currentTrack.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.queueRow, active && { borderColor: accentColor, borderWidth: 1 }]}
+                    onPress={() => playTrack(item)}
+                  >
+                    <Image source={{ uri: item.thumbnail }} style={styles.queueArt} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.compactTitle, active && { color: accentColor }]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.compactArtist} numberOfLines={1}>
+                        {item.artist}
+                      </Text>
+                    </View>
+                    {!active && (
+                      <TouchableOpacity onPress={() => removeFromQueue(item.id)} style={styles.iconBtn}>
+                        <Trash2 size={16} color="#71717A" />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           ) : (
             <View style={styles.coverWrap}>
               <Image source={{ uri: currentTrack.thumbnail }} style={styles.bigArt} />
@@ -151,28 +191,40 @@ export default function PlayerScreen() {
               seekTo(ratio * duration);
             }}
           >
-            <View style={[styles.seekFill, { width: `${progress * 100}%` }]} />
+            <View style={[styles.seekFill, { width: `${progress * 100}%`, backgroundColor: accentColor }]} />
           </TouchableOpacity>
           <View style={styles.timeRow}>
             <Text style={styles.timeText}>{formatTime(position)}</Text>
+            {sleepRemainingSec > 0 && (
+              <Text style={[styles.timeText, { color: accentColor }]}>
+                Sleep {Math.ceil(sleepRemainingSec / 60)}m
+              </Text>
+            )}
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
 
           <View style={styles.transportRow}>
-            <TouchableOpacity onPress={() => setShowLyrics(!showLyrics)} style={styles.iconBtn}>
-              <MessageSquareQuote size={22} color={showLyrics ? '#B69DF8' : '#A1A1AA'} />
+            <TouchableOpacity onPress={toggleShuffle} style={styles.iconBtn}>
+              <Shuffle size={20} color={shuffleEnabled ? accentColor : '#A1A1AA'} />
             </TouchableOpacity>
             <TouchableOpacity onPress={prevTrack} style={styles.iconBtn}>
               <SkipBack size={28} color="#FFF" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={togglePlayPause} style={styles.mainPlayBtn}>
+            <TouchableOpacity
+              onPress={togglePlayPause}
+              style={[styles.mainPlayBtn, { backgroundColor: accentColor }]}
+            >
               {isPlaying ? <Pause size={30} color="#09090B" /> : <Play size={30} color="#09090B" />}
             </TouchableOpacity>
             <TouchableOpacity onPress={nextTrack} style={styles.iconBtn}>
               <SkipForward size={28} color="#FFF" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowFx(true)} style={styles.iconBtn}>
-              <Sliders size={22} color="#A1A1AA" />
+            <TouchableOpacity onPress={cycleRepeatMode} style={styles.iconBtn}>
+              {repeatMode === 'one' ? (
+                <Repeat1 size={20} color={accentColor} />
+              ) : (
+                <Repeat size={20} color={repeatMode === 'all' ? accentColor : '#A1A1AA'} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -202,12 +254,11 @@ const styles = StyleSheet.create({
     padding: 3
   },
   modeTab: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 13,
     paddingVertical: 6,
     borderRadius: 99
   },
-  modeTabActive: { backgroundColor: '#B69DF8' },
-  modeTabText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
+  modeTabText: { color: '#A1A1AA', fontSize: 12, fontWeight: '600' },
   modeTabTextActive: { color: '#09090B', fontWeight: '700' },
   body: { flex: 1, marginVertical: 8 },
   lyricsWrap: { flex: 1 },
@@ -218,8 +269,17 @@ const styles = StyleSheet.create({
     marginBottom: 14
   },
   compactArt: { width: 52, height: 52, borderRadius: 12, backgroundColor: '#27272A' },
-  compactTitle: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  compactTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   compactArtist: { color: '#A1A1AA', fontSize: 13, marginTop: 2 },
+  queueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#14141A',
+    padding: 10,
+    borderRadius: 14,
+    gap: 12
+  },
+  queueArt: { width: 46, height: 46, borderRadius: 10, backgroundColor: '#27272A' },
   coverWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 26 },
   bigArt: { width: 290, height: 290, borderRadius: 28, backgroundColor: '#18181B' },
   trackMetaRow: {
@@ -238,8 +298,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   seekFill: {
-    height: '100%',
-    backgroundColor: '#B69DF8'
+    height: '100%'
   },
   timeRow: {
     flexDirection: 'row',
@@ -258,7 +317,6 @@ const styles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: '#B69DF8',
     alignItems: 'center',
     justifyContent: 'center'
   }

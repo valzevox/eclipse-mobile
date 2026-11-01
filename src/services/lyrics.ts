@@ -18,6 +18,25 @@ export interface LyricLine {
   translation?: string;
 }
 
+function decodeBase64Utf8(b64: string): string {
+  try {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = b64.replace(/=+$/, '');
+    let output = '';
+    for (let bc = 0, bs = 0, buffer, idx = 0; (buffer = str.charAt(idx++)); ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4) ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)))) : 0) {
+      buffer = chars.indexOf(buffer);
+    }
+    return decodeURIComponent(
+      output
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+  } catch (_) {
+    return '';
+  }
+}
+
 export function parseLrc(lrcText: string): LyricLine[] {
   if (!lrcText || typeof lrcText !== 'string') return [];
   const lines = lrcText.split(/\r?\n/);
@@ -30,7 +49,6 @@ export function parseLrc(lrcText: string): LyricLine[] {
     const content = raw.replace(timeExp, '').trim();
     if (!content) continue;
 
-    // Check inline word-level timestamps e.g. <00:12.34>word
     const wordMatches = [...content.matchAll(/<(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?>([^<]+)/g)];
     let words: LyricWord[] | undefined;
     let plainText = content;
@@ -108,15 +126,7 @@ export function parseNetEaseYrc(yrcText: string): LyricLine[] {
   return out.sort((a, b) => a.time - b.time);
 }
 
-export async function fetchSyncedLyrics(
-  title: string,
-  artist: string,
-  duration?: number,
-  source: LyricsSource = 'lrclib'
-): Promise<LyricLine[]> {
-  const cleanTitle = title.replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
-  const cleanArtist = artist.replace(/\s*-\s*Topic$/i, '').trim();
-
+async function fetchFromLrcLib(cleanTitle: string, cleanArtist: string): Promise<LyricLine[]> {
   try {
     const q = encodeURIComponent(`${cleanArtist} ${cleanTitle}`);
     const res = await fetch(`https://lrclib.net/api/search?q=${q}`);
@@ -131,6 +141,104 @@ export async function fetchSyncedLyrics(
       }
     }
   } catch (_) {}
+  return [];
+}
+
+async function fetchFromNetEase(cleanTitle: string, cleanArtist: string, duration?: number): Promise<LyricLine[]> {
+  try {
+    const q = encodeURIComponent(`${cleanTitle} ${cleanArtist}`);
+    const sRes = await fetch(`https://music.163.com/api/search/get/web?s=${q}&type=1&limit=5`, {
+      headers: { Referer: 'https://music.163.com' }
+    });
+    if (!sRes.ok) return [];
+    const sJson = await sRes.json();
+    const songs = sJson?.result?.songs;
+    if (!Array.isArray(songs) || !songs.length) return [];
+
+    const chosen =
+      songs.find((s: any) => {
+        if (duration && duration > 0 && s.duration) {
+          return Math.abs(s.duration / 1000 - duration) <= 6;
+        }
+        return true;
+      }) || songs[0];
+
+    if (!chosen?.id) return [];
+    const lRes = await fetch(`https://music.163.com/api/song/lyric?id=${chosen.id}&lv=1&kv=1&tv=-1&yv=1`, {
+      headers: { Referer: 'https://music.163.com' }
+    });
+    if (!lRes.ok) return [];
+    const lJson = await lRes.json();
+
+    if (lJson?.yrc?.lyric) {
+      const yrcLines = parseNetEaseYrc(lJson.yrc.lyric);
+      if (yrcLines.length > 0) return yrcLines;
+    }
+    if (lJson?.lrc?.lyric) {
+      const lrcLines = parseLrc(lJson.lrc.lyric);
+      if (lrcLines.length > 0) return lrcLines;
+    }
+  } catch (_) {}
+  return [];
+}
+
+async function fetchFromKuGou(cleanTitle: string, cleanArtist: string, duration?: number): Promise<LyricLine[]> {
+  try {
+    const durMs = Math.round((duration || 200) * 1000);
+    const kw = encodeURIComponent(`${cleanArtist} - ${cleanTitle}`);
+    const sRes = await fetch(`https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${kw}&duration=${durMs}&hash=`);
+    if (!sRes.ok) return [];
+    const sJson = await sRes.json();
+    const cand = sJson?.candidates?.[0];
+    if (!cand?.id || !cand?.accesskey) return [];
+
+    const dRes = await fetch(
+      `https://lyrics.kugou.com/download?ver=1&client=pc&id=${cand.id}&accesskey=${cand.accesskey}&fmt=lrc&charset=utf8`
+    );
+    if (!dRes.ok) return [];
+    const dJson = await dRes.json();
+    if (!dJson?.content) return [];
+    const decoded = decodeBase64Utf8(dJson.content);
+    if (decoded) {
+      return parseLrc(decoded);
+    }
+  } catch (_) {}
+  return [];
+}
+
+export async function fetchSyncedLyrics(
+  title: string,
+  artist: string,
+  duration?: number,
+  source: LyricsSource = 'lrclib'
+): Promise<LyricLine[]> {
+  const cleanTitle = (title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
+  const cleanArtist = (artist || '').replace(/\s*-\s*Topic$/i, '').trim();
+
+  if (source === 'netease') {
+    const ne = await fetchFromNetEase(cleanTitle, cleanArtist, duration);
+    if (ne.length > 0) return ne;
+  } else if (source === 'kugou') {
+    const kg = await fetchFromKuGou(cleanTitle, cleanArtist, duration);
+    if (kg.length > 0) return kg;
+  }
+
+  // Priority fallback chain (NetEase YRC word-sync -> LRCLIB -> KuGou)
+  const lrc = await fetchFromLrcLib(cleanTitle, cleanArtist);
+  if (lrc.length > 0) {
+    // If wordSync is desired and LRCLIB has no word timestamps, try enriching from NetEase YRC
+    if (!lrc.some((l) => l.words && l.words.length > 0)) {
+      const ne = await fetchFromNetEase(cleanTitle, cleanArtist, duration);
+      if (ne.some((l) => l.words && l.words.length > 0)) return ne;
+    }
+    return lrc;
+  }
+
+  const neFallback = await fetchFromNetEase(cleanTitle, cleanArtist, duration);
+  if (neFallback.length > 0) return neFallback;
+
+  const kgFallback = await fetchFromKuGou(cleanTitle, cleanArtist, duration);
+  if (kgFallback.length > 0) return kgFallback;
 
   return [];
 }

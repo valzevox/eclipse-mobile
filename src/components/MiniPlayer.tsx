@@ -1,4 +1,4 @@
-// TypeScript / src/components/MiniPlayer.tsx / Expo React Native / Floating Glass MiniPlayer
+// TypeScript / src/components/MiniPlayer.tsx / Expo React Native / Floating Glass MiniPlayer with Dynamic Accent
 
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
@@ -8,7 +8,17 @@ import { usePlayerStore } from '../store/usePlayerStore';
 
 export function MiniPlayer() {
   const router = useRouter();
-  const { currentTrack, isPlaying, togglePlayPause, nextTrack, favorites, toggleFavorite, position, duration } = usePlayerStore();
+  const {
+    currentTrack,
+    isPlaying,
+    togglePlayPause,
+    nextTrack,
+    favorites,
+    toggleFavorite,
+    position,
+    duration,
+    accentColor
+  } = usePlayerStore();
 
   if (!currentTrack) return null;
   const isFav = favorites.some((t) => t.id === currentTrack.id);
@@ -20,7 +30,7 @@ export function MiniPlayer() {
       activeOpacity={0.92}
       onPress={() => router.push('/player')}
     >
-      <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
+      <View style={[styles.progressBar, { width: `${progress * 100}%`, backgroundColor: accentColor }]} />
       <View style={styles.content}>
         <Image source={{ uri: currentTrack.thumbnail }} style={styles.art} />
         <View style={styles.meta}>
@@ -34,7 +44,7 @@ export function MiniPlayer() {
         <TouchableOpacity onPress={() => toggleFavorite(currentTrack)} style={styles.iconBtn}>
           <Heart size={20} color={isFav ? '#FF4D6D' : '#A1A1AA'} fill={isFav ? '#FF4D6D' : 'none'} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={togglePlayPause} style={styles.playBtn}>
+        <TouchableOpacity onPress={togglePlayPause} style={[styles.playBtn, { backgroundColor: accentColor }]}>
           {isPlaying ? <Pause size={20} color="#000" /> : <Play size={20} color="#000" />}
         </TouchableOpacity>
         <TouchableOpacity onPress={nextTrack} style={styles.iconBtn}>
@@ -58,8 +68,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)'
   },
   progressBar: {
-    height: 2.5,
-    backgroundColor: '#B69DF8'
+    height: 2.5
   },
   content: {
     flexDirection: 'row',
@@ -94,7 +103,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#B69DF8',
     alignItems: 'center',
     justifyContent: 'center'
   }
