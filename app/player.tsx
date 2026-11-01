@@ -1,9 +1,10 @@
-// TypeScript / app/player.tsx / Expo React Native / Fullscreen Player, AMLL Synced Lyrics & Up Next Queue
+// TypeScript / app/player.tsx / Expo React Native / Fullscreen Player, AMLL Synced Lyrics, MV Video & Up Next Queue
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Video, ResizeMode } from 'expo-av';
 import {
   ChevronDown,
   Play,
@@ -19,6 +20,7 @@ import {
   Trash2
 } from 'lucide-react-native';
 import { usePlayerStore } from '../src/store/usePlayerStore';
+import { resolveVideoStreamUrl } from '../src/services/innertube';
 import { downloadTrackOffline } from '../src/services/offlineCache';
 import { LyricsView } from '../src/components/LyricsView';
 import { AudioFxModal } from '../src/components/AudioFxModal';
@@ -58,9 +60,23 @@ export default function PlayerScreen() {
     addDownload
   } = usePlayerStore();
 
-  const [tab, setTab] = useState<'cover' | 'lyrics' | 'queue'>('lyrics');
+  const [tab, setTab] = useState<'cover' | 'lyrics' | 'mv' | 'queue'>('lyrics');
   const [showFx, setShowFx] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [mvUrl, setMvUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (tab === 'mv' && currentTrack) {
+      setMvUrl(null);
+      resolveVideoStreamUrl(currentTrack).then((url) => {
+        if (mounted) setMvUrl(url);
+      });
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [tab, currentTrack?.id]);
 
   if (!currentTrack) {
     return (
@@ -92,10 +108,16 @@ export default function PlayerScreen() {
             <ChevronDown size={26} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.modeTabs}>
-            {(['cover', 'lyrics', 'queue'] as const).map((key) => {
+            {(['cover', 'lyrics', 'mv', 'queue'] as const).map((key) => {
               const active = tab === key;
               const label =
-                key === 'cover' ? 'Cover' : key === 'lyrics' ? tr(uiLang, 'lyrics') : `Queue (${queue.length})`;
+                key === 'cover'
+                  ? 'Cover'
+                  : key === 'lyrics'
+                  ? tr(uiLang, 'lyrics')
+                  : key === 'mv'
+                  ? 'MV'
+                  : `Queue (${queue.length})`;
               return (
                 <TouchableOpacity
                   key={key}
@@ -133,6 +155,30 @@ export default function PlayerScreen() {
                 </TouchableOpacity>
               </View>
               <LyricsView />
+            </View>
+          ) : tab === 'mv' ? (
+            <View style={styles.mvWrap}>
+              {mvUrl ? (
+                <Video
+                  source={{ uri: mvUrl }}
+                  style={styles.videoPlayer}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={isPlaying}
+                  isMuted={true}
+                  positionMillis={Math.floor(position * 1000)}
+                />
+              ) : (
+                <View style={styles.mvFallback}>
+                  <Image source={{ uri: currentTrack.thumbnail }} style={styles.mvArt} />
+                  <Text style={styles.compactArtist}>Loading HD MV stream...</Text>
+                </View>
+              )}
+              <Text style={styles.bigTitle} numberOfLines={1}>
+                {currentTrack.title}
+              </Text>
+              <Text style={styles.bigArtist} numberOfLines={1}>
+                {currentTrack.artist}
+              </Text>
             </View>
           ) : tab === 'queue' ? (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
@@ -254,7 +300,7 @@ const styles = StyleSheet.create({
     padding: 3
   },
   modeTab: {
-    paddingHorizontal: 13,
+    paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 99
   },
@@ -262,6 +308,10 @@ const styles = StyleSheet.create({
   modeTabTextActive: { color: '#09090B', fontWeight: '700' },
   body: { flex: 1, marginVertical: 8 },
   lyricsWrap: { flex: 1 },
+  mvWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  videoPlayer: { width: '100%', height: 240, borderRadius: 20, backgroundColor: '#000' },
+  mvFallback: { width: '100%', height: 240, borderRadius: 20, backgroundColor: '#14141A', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  mvArt: { width: 120, height: 120, borderRadius: 16 },
   compactHeader: {
     flexDirection: 'row',
     alignItems: 'center',
