@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrackItem, getDefaultTrendingTracks, resolveStreamUrl, searchTracks } from '../services/innertube';
+import { TrackItem, getDefaultTrendingTracks, resolveStreamUrl, prefetchNextTracks, searchTracks } from '../services/innertube';
 import { LyricLine, LyricsSource, fetchSyncedLyrics, enrichLyricsWithTranslationAndRomaji } from '../services/lyrics';
 import { LangCode } from '../services/i18n';
 import { ImportedPlaylist } from '../services/playlistImport';
@@ -243,6 +243,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
     savePersistedSlice(get());
     sendNowPlayingStatus(track, get().scrobblerConfig);
+
+    // Zero-wait playback: Asynchronously prefetch stream URLs for the upcoming 2 tracks in queue
+    const currentIdx = updatedQueue.findIndex((t) => t.id === track.id);
+    if (currentIdx !== -1) {
+      const nextTracks = [
+        updatedQueue[(currentIdx + 1) % updatedQueue.length],
+        updatedQueue[(currentIdx + 2) % updatedQueue.length]
+      ].filter(Boolean);
+      prefetchNextTracks(nextTracks);
+    }
 
     fetchSponsorSegments(track.id).then((segs) => {
       if (get().currentTrack?.id === track.id) {

@@ -88,6 +88,10 @@ export async function searchTracks(
   return getDefaultTrendingTracks();
 }
 
+// In-memory stream cache for zero-latency prefetch (3-hour TTL)
+const streamCache = new Map<string, { url: string; timestamp: number }>();
+const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+
 export async function resolveStreamUrl(track: TrackItem): Promise<string> {
   if (track.localUri) return track.localUri;
   if (track.platform === 'soundcloud' && track.streamUrl) {
@@ -95,6 +99,11 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     if (resolved) return resolved;
   }
   if (track.streamUrl) return track.streamUrl;
+
+  const cached = streamCache.get(track.id);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.url;
+  }
 
   for (const base of PIPED_INSTANCES) {
     try {
@@ -104,7 +113,10 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
       if (data && Array.isArray(data.audioStreams) && data.audioStreams.length > 0) {
         const sorted = [...data.audioStreams].sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
         const best = sorted.find((s) => s.mimeType?.includes('mp4') || s.mimeType?.includes('m4a')) || sorted[0];
-        if (best && best.url) return best.url;
+        if (best && best.url) {
+          streamCache.set(track.id, { url: best.url, timestamp: Date.now() });
+          return best.url;
+        }
       }
     } catch (_) {}
   }
@@ -116,12 +128,24 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
       const data = await res.json();
       if (data && Array.isArray(data.adaptiveFormats)) {
         const audios = data.adaptiveFormats.filter((f: any) => f.type && f.type.startsWith('audio/'));
-        if (audios.length > 0 && audios[0].url) return audios[0].url;
+        if (audios.length > 0 && audios[0].url) {
+          streamCache.set(track.id, { url: audios[0].url, timestamp: Date.now() });
+          return audios[0].url;
+        }
       }
     } catch (_) {}
   }
 
   return 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+}
+
+export async function prefetchNextTracks(tracks: TrackItem[]): Promise<void> {
+  for (const t of tracks) {
+    if (!t || t.localUri || t.streamUrl) continue;
+    const cached = streamCache.get(t.id);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) continue;
+    resolveStreamUrl(t).catch(() => {});
+  }
 }
 
 export async function resolveVideoStreamUrl(track: TrackItem): Promise<string | null> {
