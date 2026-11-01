@@ -30,9 +30,20 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>Eclipse</Text>
-          <View style={[styles.dot, { backgroundColor: accentColor }]} />
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.greetingText}>
+              {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}
+            </Text>
+            <View style={styles.brandRow}>
+              <Text style={styles.brand}>Eclipse</Text>
+              <View style={[styles.dot, { backgroundColor: accentColor }]} />
+            </View>
+          </View>
+          <View style={[styles.livePill, { borderColor: `${accentColor}55` }]}>
+            <View style={[styles.liveDot, { backgroundColor: accentColor }]} />
+            <Text style={[styles.liveText, { color: accentColor }]}>FLAC / HI-RES</Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -124,7 +135,12 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#09090B' },
   container: { flex: 1 },
   content: { padding: 18, paddingBottom: 130 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 18 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  greetingText: { color: '#71717A', fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
+  livePill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.03)' },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   brand: { color: '#FFF', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 8 },
   waveBanner: {
