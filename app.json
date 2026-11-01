@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Eclipse Music",
+    "slug": "eclipse-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "eclipse",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.valzevox.eclipsemobile",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
+    },
+    "android": {
+      "package": "com.valzevox.eclipsemobile",
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}
