@@ -1,11 +1,12 @@
-// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, SponsorBlock, Loudness Norm & Presence Settings
+// TypeScript / app/(tabs)/settings.tsx / Expo React Native / Multilingual UI, SponsorBlock, Loudness Norm, In-App Update & Presence Settings
 
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Switch, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Globe, Sparkles, Languages, Radio, Sliders } from 'lucide-react-native';
+import { Globe, Sparkles, Languages, Radio, Sliders, RefreshCw, CheckCircle2 } from 'lucide-react-native';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
 import { UI_LANGUAGES, tr } from '../../src/services/i18n';
+import { checkForAppUpdate, getCurrentAppVersion, UpdateInfo } from '../../src/services/autoUpdate';
 
 export default function SettingsScreen() {
   const {
@@ -27,6 +28,23 @@ export default function SettingsScreen() {
     toggleSponsorBlock,
     toggleLoudnessNorm
   } = usePlayerStore();
+
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [manualUpdateMsg, setManualUpdateMsg] = useState<string | null>(null);
+
+  const handleManualCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setManualUpdateMsg(null);
+    const info = await checkForAppUpdate();
+    setCheckingUpdate(false);
+    if (info && info.hasUpdate) {
+      setManualUpdateMsg(`New version v${info.version} available! Check popup or restart.`);
+    } else {
+      setManualUpdateMsg(`You are on the latest version v${getCurrentAppVersion()}`);
+    }
+  };
+
+  const currentVer = getCurrentAppVersion();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -165,11 +183,33 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Languages size={18} color={accentColor} />
-            <Text style={styles.cardTitle}>Eclipse v1.0.0</Text>
+            <Text style={styles.cardTitle}>Eclipse v{currentVer}</Text>
           </View>
           <Text style={styles.aboutText}>
             Powered by Innertube, SoundCloud, SponsorBlock, LRCLIB, NetEase YRC, KuGou, ZingMP3 & Musixmatch. Built for iOS & Android.
           </Text>
+
+          <TouchableOpacity
+            style={[styles.checkUpdateBtn, { borderColor: `${accentColor}44` }]}
+            onPress={handleManualCheckUpdate}
+            disabled={checkingUpdate}
+          >
+            {checkingUpdate ? (
+              <ActivityIndicator size="small" color={accentColor} />
+            ) : (
+              <RefreshCw size={16} color={accentColor} />
+            )}
+            <Text style={[styles.checkUpdateBtnText, { color: accentColor }]}>
+              {checkingUpdate ? 'Checking for updates...' : 'Check for Updates'}
+            </Text>
+          </TouchableOpacity>
+
+          {manualUpdateMsg && (
+            <View style={styles.updateMsgRow}>
+              <CheckCircle2 size={16} color="#10B981" />
+              <Text style={styles.updateMsgText}>{manualUpdateMsg}</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -215,5 +255,35 @@ const styles = StyleSheet.create({
     height: 40,
     fontSize: 13
   },
-  aboutText: { color: '#A1A1AA', fontSize: 13, lineHeight: 20 }
+  aboutText: { color: '#A1A1AA', fontSize: 13, lineHeight: 20 },
+  checkUpdateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    marginTop: 4
+  },
+  checkUpdateBtnText: {
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  updateMsgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginTop: 4
+  },
+  updateMsgText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '600'
+  }
 });

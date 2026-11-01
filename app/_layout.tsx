@@ -1,10 +1,18 @@
-// TypeScript / app/_layout.tsx / Expo React Native / Root Stack Navigation
+// TypeScript / app/_layout.tsx / Expo React Native / Root Stack Navigation with In-App Auto Update
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { usePlayerStore } from '../src/store/usePlayerStore';
+import { UpdateModal } from '../src/components/UpdateModal';
 
 export default function RootLayout() {
+  const { hydrateStore } = usePlayerStore();
+
+  useEffect(() => {
+    hydrateStore();
+  }, []);
+
   return (
     <>
       <StatusBar style="light" />
@@ -18,6 +26,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      <UpdateModal />
     </>
   );
 }
