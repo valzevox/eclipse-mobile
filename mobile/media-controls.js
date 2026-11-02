@@ -66,6 +66,12 @@ module.exports = function mediaControls() {
 
   window.MurielNative = {
     openUrl: (url) => plugin.openUrl({ url }).catch(() => { location.href = url; }),
+    downloadAndInstall: (url, onProgress) => {
+      if (onProgress && plugin.addListener) {
+        plugin.addListener('downloadProgress', onProgress);
+      }
+      return plugin.downloadAndInstall({ url });
+    },
     installApk: (filePath) => plugin.installApk({ filePath }).catch((e) => {
       console.warn('installApk failed', e);
       if (/^https?:\/\//i.test(filePath)) location.href = filePath;

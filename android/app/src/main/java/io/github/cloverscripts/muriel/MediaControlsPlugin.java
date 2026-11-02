@@ -376,6 +376,91 @@ public class MediaControlsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void downloadAndInstall(PluginCall call) {
+        String urlString = call.getString("url", "");
+        if (urlString == null || urlString.isEmpty()) {
+            call.reject("no url");
+            return;
+        }
+        Context context = getContext();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!context.getPackageManager().canRequestPackageInstalls()) {
+                Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
+                permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(permIntent);
+                call.reject("PERMISSION_NEEDED");
+                return;
+            }
+        }
+        new Thread(() -> {
+            java.net.HttpURLConnection conn = null;
+            java.io.InputStream in = null;
+            java.io.FileOutputStream out = null;
+            try {
+                java.net.URL url = new java.net.URL(urlString);
+                conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(30000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 Eclipse");
+                int code = conn.getResponseCode();
+                if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                    String redirectUrl = conn.getHeaderField("Location");
+                    if (redirectUrl != null && !redirectUrl.isEmpty()) {
+                        conn.disconnect();
+                        url = new java.net.URL(redirectUrl);
+                        conn = (java.net.HttpURLConnection) url.openConnection();
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(30000);
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 Eclipse");
+                    }
+                }
+                in = conn.getInputStream();
+                long totalLength = conn.getContentLength();
+                java.io.File cacheDir = context.getCacheDir();
+                java.io.File apkFile = new java.io.File(cacheDir, "update.apk");
+                if (apkFile.exists()) apkFile.delete();
+                out = new java.io.FileOutputStream(apkFile);
+                byte[] buf = new byte[8192];
+                int read;
+                long downloaded = 0;
+                long lastNotify = 0;
+                while ((read = in.read(buf)) != -1) {
+                    out.write(buf, 0, read);
+                    downloaded += read;
+                    long now = System.currentTimeMillis();
+                    if (now - lastNotify > 300) {
+                        lastNotify = now;
+                        JSObject progress = new JSObject();
+                        progress.put("downloaded", downloaded);
+                        progress.put("total", totalLength);
+                        progress.put("percent", totalLength > 0 ? (int)((downloaded * 100) / totalLength) : 0);
+                        notifyListeners("downloadProgress", progress);
+                    }
+                }
+                out.flush();
+                JSObject finish = new JSObject();
+                finish.put("downloaded", downloaded);
+                finish.put("total", totalLength);
+                finish.put("percent", 100);
+                notifyListeners("downloadProgress", finish);
+                Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", apkFile);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("download failed: " + e.getMessage());
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                if (conn != null) conn.disconnect();
+            }
+        }).start();
+    }
+    @PluginMethod
     public void installApk(PluginCall call) {
         String filePath = call.getString("filePath", "");
         if (filePath == null || filePath.isEmpty()) {
@@ -385,10 +470,27 @@ public class MediaControlsPlugin extends Plugin {
         try {
             java.io.File file = new java.io.File(filePath);
             if (!file.exists()) {
+                java.io.File ext = new java.io.File(context.getExternalFilesDir(null), filePath);
+                if (ext.exists()) file = ext;
+                else {
+                    java.io.File cache = new java.io.File(context.getCacheDir(), filePath);
+                    if (cache.exists()) file = cache;
+                }
+            }
+            if (!file.exists()) {
                 call.reject("file not found: " + filePath);
                 return;
             }
             Context context = getContext();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.getPackageManager().canRequestPackageInstalls()) {
+                    Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
+                    permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(permIntent);
+                    call.reject("PERMISSION_NEEDED");
+                    return;
+                }
+            }
             Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", file);
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(apkUri, "application/vnd.android.package-archive");

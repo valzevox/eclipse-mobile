@@ -104,40 +104,78 @@
   }
 
   let modalEl = null;
-  function showUpdateModal(update) {
+  function showUpdateModal(update, isChangelogOnly = false) {
     if (modalEl) modalEl.remove();
     modalEl = document.createElement('div');
-    modalEl.style.cssText = 'position:fixed;inset:0;z-index:999998;background:rgba(0,0,0,0.68);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:20px;';
-    modalEl.innerHTML = `
-      <div style="width:100%;max-width:420px;max-height:82vh;background:var(--md-sys-color-surface-container-high,#1A1922);border:1px solid rgba(255,255,255,0.12);border-radius:26px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(0,0,0,0.6);color:var(--md-sys-color-on-surface,#fff);">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:44px;height:44px;border-radius:22px;background:rgba(182,157,248,0.18);display:flex;align-items:center;justify-content:center;color:var(--md-sys-color-primary,#B69DF8);flex-shrink:0;">
-            <svg viewBox="0 0 512 512" width="26" height="26" fill="currentColor"><path d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>
-          </div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;font-size:17px;letter-spacing:-0.3px;">Update Available</div>
-            <div style="font-size:13px;opacity:0.7;">Eclipse v${update.version} • Latest Build</div>
-          </div>
-        </div>
-        <div style="overflow-y:auto;max-height:50vh;padding:14px;background:rgba(0,0,0,0.22);border-radius:18px;font-size:13px;color:#D4D4D8;">
-          ${renderMarkdown(update.notes)}
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
-          <button type="button" id="eclipse-upd-later" style="padding:10px 18px;border-radius:999px;background:rgba(255,255,255,0.08);color:#D4D4D8;font-weight:600;font-size:13px;cursor:pointer;">Later</button>
-          <button type="button" id="eclipse-upd-go" style="padding:10px 20px;border-radius:999px;background:var(--md-sys-color-primary,#B69DF8);color:#121214;font-weight:700;font-size:13px;cursor:pointer;">Download Update</button>
-        </div>
-      </div>
-    `;
+    modalEl.style.cssText = 'position:fixed;inset:0;z-index:999998;background:rgba(0,0,0,0.72);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;';
+    const title = isChangelogOnly ? "What\'s New in Eclipse" : "Update Available";
+    const subtitle = isChangelogOnly ? ("Eclipse v" + update.version + " • Just Updated") : ("Eclipse v" + update.version + " • Latest Build");
+    const actionBtnText = isChangelogOnly ? 'Got it' : 'Download & Install';
+    let html = '<div style="width:100%;max-width:440px;max-height:85vh;background:var(--md-sys-color-surface-container-high,#1A1922);border:1px solid rgba(255,255,255,0.14);border-radius:28px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 60px rgba(0,0,0,0.7);color:var(--md-sys-color-on-surface,#fff);animation:popupFadeIn 0.25s cubic-bezier(0.2, 0, 0, 1);">';
+    html += '<div style="display:flex;align-items:center;gap:14px;">';
+    html += '<div style="width:48px;height:48px;border-radius:24px;background:rgba(182,157,248,0.2);display:flex;align-items:center;justify-content:center;color:var(--md-sys-color-primary,#B69DF8);flex-shrink:0;">';
+    html += '<svg viewBox="0 0 512 512" width="28" height="28" fill="currentColor"><path d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>';
+    html += '</div>';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div style="font-weight:700;font-size:18px;letter-spacing:-0.3px;">' + title + '</div>';
+    html += '<div style="font-size:13px;opacity:0.75;">' + subtitle + '</div>';
+    html += '</div></div>';
+    html += '<div style="overflow-y:auto;max-height:48vh;padding:16px;background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.06);border-radius:20px;font-size:13px;color:#D4D4D8;line-height:1.5;">' + renderMarkdown(update.notes) + '</div>';
+    html += '<div id="eclipse-upd-progress-wrap" style="display:none;flex-direction:column;gap:6px;">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:12px;opacity:0.8;"><span id="eclipse-upd-status-text">Downloading update…</span><span id="eclipse-upd-pct-text">0%</span></div>';
+    html += '<div style="height:6px;width:100%;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;"><div id="eclipse-upd-bar" style="height:100%;width:0%;background:var(--md-sys-color-primary,#B69DF8);transition:width 0.2s ease;"></div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px;">';
+    if (!isChangelogOnly) html += '<button type="button" id="eclipse-upd-later" style="padding:11px 20px;border-radius:999px;background:rgba(255,255,255,0.08);color:#D4D4D8;font-weight:600;font-size:13px;cursor:pointer;border:none;">Later</button>';
+    html += '<button type="button" id="eclipse-upd-go" style="padding:11px 22px;border-radius:999px;background:var(--md-sys-color-primary,#B69DF8);color:#121214;font-weight:700;font-size:13px;cursor:pointer;border:none;">' + actionBtnText + '</button>';
+    html += '</div></div>';
+    modalEl.innerHTML = html;
     document.body.appendChild(modalEl);
-    modalEl.querySelector('#eclipse-upd-later').addEventListener('click', () => {
-      store.set('eclipse_update_snooze', { ver: update.version, until: Date.now() + SNOOZE });
-      modalEl.remove();
-      modalEl = null;
-    });
-    modalEl.querySelector('#eclipse-upd-go').addEventListener('click', () => {
-      openExternal(update.url);
-      modalEl.remove();
-      modalEl = null;
+    const laterBtn = modalEl.querySelector('#eclipse-upd-later');
+    if (laterBtn) {
+      laterBtn.addEventListener('click', () => {
+        store.set('eclipse_update_snooze', { ver: update.version, until: Date.now() + SNOOZE });
+        modalEl.remove();
+        modalEl = null;
+      });
+    }
+    const goBtn = modalEl.querySelector('#eclipse-upd-go');
+    goBtn.addEventListener('click', () => {
+      if (isChangelogOnly) {
+        modalEl.remove();
+        modalEl = null;
+        return;
+      }
+      const progWrap = modalEl.querySelector('#eclipse-upd-progress-wrap');
+      const bar = modalEl.querySelector('#eclipse-upd-bar');
+      const statusTxt = modalEl.querySelector('#eclipse-upd-status-text');
+      const pctTxt = modalEl.querySelector('#eclipse-upd-pct-text');
+      if (window.MurielNative && typeof window.MurielNative.downloadAndInstall === 'function' && String(update.url || '').endsWith('.apk')) {
+        goBtn.disabled = true;
+        goBtn.style.opacity = '0.5';
+        if (laterBtn) laterBtn.style.display = 'none';
+        progWrap.style.display = 'flex';
+        window.MurielNative.downloadAndInstall(update.url, (p) => {
+          const pct = Math.max(0, Math.min(100, (p && p.percent) || 0));
+          if (bar) bar.style.width = pct + '%';
+          if (pctTxt) pctTxt.textContent = pct + '%';
+          if (pct >= 100 && statusTxt) statusTxt.textContent = 'Launching installer…';
+        }).catch((err) => {
+          const errMsg = String((err && err.message) || err || '');
+          if (errMsg.includes('PERMISSION_NEEDED')) {
+            if (statusTxt) statusTxt.textContent = 'Please allow Install unknown apps, then click Download again';
+          } else {
+            openExternal(update.url);
+          }
+          goBtn.disabled = false;
+          goBtn.style.opacity = '1';
+          if (laterBtn) laterBtn.style.display = 'inline-block';
+        });
+      } else {
+        openExternal(update.url);
+        modalEl.remove();
+        modalEl = null;
+      }
     });
   }
 
@@ -192,8 +230,7 @@
     current = describe(rel);
     if (current) {
       setStatus('Eclipse v' + current.version + ' is available', current);
-      if (manual) showUpdateModal(current);
-      else showBanner(current);
+      showUpdateModal(current);
     } else {
       setStatus("You're up to date (v" + CURRENT_VER + ')');
     }
@@ -202,7 +239,19 @@
   if (checkBtn) checkBtn.addEventListener('click', () => (current ? showUpdateModal(current) : check(true)));
   if (statusEl) setStatus('Eclipse v' + CURRENT_VER + ' • Checks for updates automatically');
 
-  setTimeout(() => check(false), 3500);
+  const lastSeenVer = store.get('eclipse_last_seen_version');
+  if (lastSeenVer && isNewerVer(CURRENT_VER, lastSeenVer)) {
+    store.set('eclipse_last_seen_version', CURRENT_VER);
+    fetchLatestRelease().then((rel) => {
+      if (rel && (rel.tag_name || '').replace(/^v/i, '') === CURRENT_VER) {
+        showUpdateModal({ tag: rel.tag_name, version: CURRENT_VER, notes: rel.body || '', page: rel.html_url }, true);
+      }
+    }).catch(() => {});
+  } else if (!lastSeenVer) {
+    store.set('eclipse_last_seen_version', CURRENT_VER);
+  }
+
+  setTimeout(() => check(false), 2000);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       const last = store.get('eclipse_update_last') || 0;
