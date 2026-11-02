@@ -49,8 +49,8 @@ jobs:
         run: |
           export ECLIPSE_VERSION_NAME="$(node -p "require('./package.json').version")"
           export MURIEL_VERSION_NAME="$ECLIPSE_VERSION_NAME"
-          export ECLIPSE_KEYSTORE="eclipse-release.jks"
-          export MURIEL_KEYSTORE="eclipse-release.jks"
+          export ECLIPSE_KEYSTORE="$(pwd)/android/eclipse-release.jks"
+          export MURIEL_KEYSTORE="$ECLIPSE_KEYSTORE"
           export ECLIPSE_KEYSTORE_PASSWORD="eclipse123"
           export MURIEL_KEYSTORE_PASSWORD="eclipse123"
           export ECLIPSE_KEY_PASSWORD="eclipse123"

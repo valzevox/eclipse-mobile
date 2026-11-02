@@ -21,9 +21,13 @@ android {
     // new APKs install over old ones instead of requiring an uninstall.
     signingConfigs {
         release {
-            def ks = System.getenv("ECLIPSE_KEYSTORE") ?: System.getenv("MURIEL_KEYSTORE") ?: "../eclipse-release.jks"
-            if (file(ks).exists()) {
-                storeFile file(ks)
+            def ks = System.getenv("ECLIPSE_KEYSTORE") ?: System.getenv("MURIEL_KEYSTORE") ?: "eclipse-release.jks"
+            File ksFile = file(ks)
+            if (!ksFile.exists()) {
+                ksFile = file("../" + ks)
+            }
+            if (ksFile.exists()) {
+                storeFile ksFile
                 storePassword(System.getenv("ECLIPSE_KEYSTORE_PASSWORD") ?: System.getenv("MURIEL_KEYSTORE_PASSWORD") ?: "eclipse123")
                 keyAlias(System.getenv("ECLIPSE_KEY_ALIAS") ?: System.getenv("MURIEL_KEY_ALIAS") ?: "eclipse")
                 keyPassword(System.getenv("ECLIPSE_KEY_PASSWORD") ?: System.getenv("MURIEL_KEY_PASSWORD") ?: "eclipse123")
@@ -32,7 +36,12 @@ android {
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            def ks = System.getenv("ECLIPSE_KEYSTORE") ?: System.getenv("MURIEL_KEYSTORE") ?: "eclipse-release.jks"
+            File ksFile = file(ks)
+            if (!ksFile.exists()) ksFile = file("../" + ks)
+            if (ksFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
