@@ -1,6 +1,5 @@
 ﻿const http = require('http');
 const https = require('https');
-const zlib = require('zlib');
 const url = require('url');
 const fs = require('fs');
 const path = require('path');
@@ -4164,8 +4163,10 @@ function fetchZingMp3Lyrics(title, artist) {
             resolve(null);
           };
 
-          if (buf[0] === 0x1f && buf[1] === 0x8b) {
-            zlib.gunzip(buf, (err, decoded) => {
+          let zlibMod = null;
+          try { zlibMod = require('zlib'); } catch (_) {}
+          if (buf[0] === 0x1f && buf[1] === 0x8b && zlibMod && typeof zlibMod.gunzip === 'function') {
+            zlibMod.gunzip(buf, (err, decoded) => {
               if (err) return resolve(null);
               try { handleJson(JSON.parse(decoded.toString('utf-8'))); } catch (_) { resolve(null); }
             });
