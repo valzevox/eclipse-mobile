@@ -600,3 +600,38 @@ html.is-mobile .app-icon-picker-grid { grid-template-columns: repeat(auto-fill, 
 
 /* song radio (#28): the queue's "Radio · song" label a little roomier for a finger */
 html.is-mobile .queue-radio-label { margin: 2px 0 10px; padding: 6px 12px 6px 10px; }
+
+/* ---------- Animate UI + Frontend Design: Dynamic Ambient Mesh, Spring Press & Cover Morph ---------- */
+html.is-mobile body:not(.perf) #right-panel > .np-ambient {
+  display: block !important;
+}
+html.is-mobile body:not(.perf).np-open:not(.hidden-window) .np-ambient i {
+  animation-play-state: running !important;
+  will-change: transform;
+}
+
+html.is-mobile :is(#btn-play-pause, .control-btn, .playbar .btn-icon-pill, .artist-play-btn, .lyrics-action-btn, .nav-item) {
+  transition: transform 240ms cubic-bezier(0.22, 1.4, 0.36, 1), background-color 160ms ease, color 160ms ease !important;
+}
+html.is-mobile :is(#btn-play-pause, .control-btn, .playbar .btn-icon-pill, .artist-play-btn, .lyrics-action-btn, .nav-item):active {
+  transform: scale(0.91) !important;
+  transition-duration: 80ms !important;
+}
+
+@keyframes eclipse-cover-swap {
+  0% { opacity: 0.35; transform: scale(0.94); filter: blur(6px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+html.is-mobile :is(#cover-container, #playbar-artwork-wrapper).cover-swap {
+  animation: eclipse-cover-swap 340ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+html.is-mobile #right-panel .lyric-line {
+  transition: opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), transform 0.42s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+html.is-mobile #right-panel .lyric-line.active {
+  opacity: 1 !important;
+  transform: scale(1.035) translateX(2px) !important;
+  text-shadow: 0 4px 24px color-mix(in srgb, var(--np-c1, #B69DF8) 45%, transparent) !important;
+}
+

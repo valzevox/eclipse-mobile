@@ -197,6 +197,39 @@
     document.addEventListener('visibilitychange', tick);
   }
 
+  // ponytail: dynamic cover-color ambient mesh (--np-c1, --np-c2), cover swap morph & haptics
+  const syncCoverSwapAndAmbient = () => {
+    [cover, document.getElementById('playbar-artwork-wrapper')].forEach((el) => {
+      if (!el) return;
+      el.classList.remove('cover-swap');
+      void el.offsetWidth;
+      el.classList.add('cover-swap');
+    });
+    const img = document.getElementById('right-panel-cover');
+    if (!img) return;
+    const sample = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 4; c.height = 4;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, 4, 4);
+        const d = ctx.getImageData(0, 0, 4, 4).data;
+        panel.style.setProperty('--np-c1', `rgb(${d[0]}, ${d[1]}, ${d[2]})`);
+        panel.style.setProperty('--np-c2', `rgb(${d[40]}, ${d[41]}, ${d[42]})`);
+      } catch (e) {}
+    };
+    if (img.complete && img.naturalWidth) sample();
+    else img.addEventListener('load', sample, { once: true });
+  };
+  window.addEventListener('muriel:track', syncCoverSwapAndAmbient);
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!navigator.vibrate) return;
+    if (e.target.closest('#btn-play-pause, #btn-next, #btn-prev, .artist-play-btn, .nav-item')) {
+      navigator.vibrate(8);
+    }
+  }, { passive: true });
+
   // phone-only settings: the song storage limit (Storage → Offline songs) and sharing the error log (About)
   const storageGroup = document.querySelector('.settings-section[data-cat="storage"] .m3-group[data-group="offline"]') || document.querySelector('.settings-section[data-cat="storage"] .m3-group');
   const aboutGroup = document.querySelector('.settings-section[data-cat="about"] .m3-group');
