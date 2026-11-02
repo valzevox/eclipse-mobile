@@ -468,6 +468,7 @@ public class MediaControlsPlugin extends Plugin {
             return;
         }
         try {
+            Context context = getContext();
             java.io.File file = new java.io.File(filePath);
             if (!file.exists()) {
                 java.io.File ext = new java.io.File(context.getExternalFilesDir(null), filePath);
@@ -481,7 +482,6 @@ public class MediaControlsPlugin extends Plugin {
                 call.reject("file not found: " + filePath);
                 return;
             }
-            Context context = getContext();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.getPackageManager().canRequestPackageInstalls()) {
                     Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
