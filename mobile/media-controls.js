@@ -63,6 +63,14 @@ module.exports = function mediaControls() {
     // resolves with the answer once the system dialog is closed
     allow: () => plugin.allowBackground().then((r) => !!(r && r.unrestricted)).catch(() => false),
   };
+
+  window.MurielNative = {
+    openUrl: (url) => plugin.openUrl({ url }).catch(() => { location.href = url; }),
+    installApk: (filePath) => plugin.installApk({ filePath }).catch((e) => {
+      console.warn('installApk failed', e);
+      if (/^https?:\/\//i.test(filePath)) location.href = filePath;
+    }),
+  };
   const ASKED = 'muriel_bg_asked';
   // Android 13+ shows an app's notifications only once it asked for them; many phones hide the playback notification
   // too, and then there is no play button after a game or a call took the music (#25). The island needs them as

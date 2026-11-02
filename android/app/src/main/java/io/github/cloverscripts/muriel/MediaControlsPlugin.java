@@ -27,6 +27,7 @@ import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -355,6 +356,49 @@ public class MediaControlsPlugin extends Plugin {
         }
         MediaScannerConnection.scanFile(getContext(), new String[] { path }, null, null);
         call.resolve();
+    }
+
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String url = call.getString("url", "");
+        if (url == null || url.isEmpty()) {
+            call.reject("no url");
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("failed to open url: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String filePath = call.getString("filePath", "");
+        if (filePath == null || filePath.isEmpty()) {
+            call.reject("no filePath");
+            return;
+        }
+        try {
+            java.io.File file = new java.io.File(filePath);
+            if (!file.exists()) {
+                call.reject("file not found: " + filePath);
+                return;
+            }
+            Context context = getContext();
+            Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", file);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("failed to launch installer: " + e.getMessage());
+        }
     }
 
     private boolean unrestricted() {
