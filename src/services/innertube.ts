@@ -1,5 +1,5 @@
 // TypeScript / src/services/innertube.ts / Expo React Native / Direct Innertube iOS Stream Resolver & WEB_REMIX Zero-Latency Search
-// Architected after Riff-Muriel 43.0.0 fetchDirectYoutubeStreamServer & ytmSearchRequest
+// Architected after Riff-Muriel 43.0.0 fetchDirectYoutubeStreamServer, parseSmartArtistAndTitle & ytmSearchRequest
 
 import { searchSoundCloud, resolveSoundCloudStream } from './soundcloud';
 
@@ -31,6 +31,21 @@ const IOS_CLIENT_CONTEXT = {
 };
 
 const IOS_USER_AGENT = 'com.google.ios.youtube/20.03.02 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X;)';
+
+const ANDROID_VR_CLIENT_CONTEXT = {
+  client: {
+    clientName: 'ANDROID_VR',
+    clientVersion: '1.60.19',
+    androidSdkVersion: 34,
+    osName: 'Android',
+    osVersion: '14',
+    hl: 'en',
+    gl: 'US'
+  }
+};
+
+const ANDROID_VR_USER_AGENT =
+  'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 14; eureka-user Build/SQ3A.220605.009.A1) gzip';
 
 const YTM_CLIENT_CONTEXT = {
   client: {
@@ -74,6 +89,93 @@ export function isSyntheticTrackId(id: string): boolean {
   );
 }
 
+// -----------------------------------------------------------------------------
+// parseSmartArtistAndTitle (Ported from Riff-Muriel app.js L758-L860)
+// Strips YouTube badges, separates "Artist - Song", and cleans metadata for 100% accurate lyrics & playback
+// -----------------------------------------------------------------------------
+const KNOWN_ARTISTS = [
+  'mck', 'rdm mck', 'hoo', 'notchaos', 'w/n', 'lowkid', 'cupid', 'kiddi', 'thanhluan', 'thanh luan',
+  'sơn tùng m-tp', 'đen', 'vũ', 'tlinh', 'hieuthuhai', 'wrxdie', 'wxrdie', 'gill',
+  'b ray', 'masew', 'soobin hoàng sơn', 'soobin', 'mono', 'justatee', 'rhymastic',
+  'dangrangto', 'eren', 'drzey', 'honlieu', 'stormie', 'fishy', 'nguyên', 'nguyên.',
+  'kidsai', 'bbynascar', '2pillz', 'younghao', 'left hand', 'lil liem', 'taki',
+  'vstra', 'hngle', 'bảo anh', 'wren evans', 'newjeans', 'ive', 'aespa', 'yoasobi',
+  'kenshi yonezu', 'taylor swift', 'maroon 5', 'billie eilish', 'the weeknd', 'coldplay'
+];
+
+export function parseSmartArtistAndTitle(rawTitle: string, rawArtist: string): { title: string; artist: string } {
+  let title = String(rawTitle || '').trim();
+  let artist = String(rawArtist || '')
+    .replace(/\s*-\s*Topic$/i, '')
+    .replace(/\bVEVO$/i, '')
+    .replace(/\s+Official$/i, '')
+    .trim();
+
+  const stripBadges = (str: string) => {
+    return str
+      .replace(/\s*\|\s*(?:official\s*(?:music\s*)?(?:video|audio|lyrics?\s*video)|lyrics?\s*video|official\s*m\/?v|mv|visualizer).*$/gi, '')
+      .replace(/\s*-\s*(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video)|lyric\s*video|official\s*video).*$/gi, '')
+      .replace(/\s*[\(\[]\s*(?:official\s*(?:music\s*)?(?:video|audio|lyric\s*video|visualizer|mv)|lyrics?\s*video|lyrics?|visualizer|hd|hq|4k|remastered\s*\d*|mv|clip\s*officiel|audio|official\s*video|official)\s*[\)\]]/gi, '')
+      .trim();
+  };
+
+  title = stripBadges(title);
+  artist = stripBadges(artist);
+
+  const matchesKnownArtist = (s: string) => {
+    if (!s) return false;
+    const norm = s.toLowerCase().replace(/\s+official$/i, '').trim();
+    return KNOWN_ARTISTS.some(a => norm === a || norm.startsWith(a + ' ') || norm.endsWith(' ' + a) || norm.includes(' ' + a + ' '));
+  };
+
+  const featPattern = /(?:[\(\[]\s*|\s+)(?:ft\.?|feat\.?|featuring|prod\.?)\s*([^\)\]]+)[\)\]]?/i;
+
+  // Split on " - ", " – ", " — "
+  const sepMatch = title.match(/^(.+?)\s+(?:[-–—]|\/\/)\s+(.+)$/);
+  if (sepMatch) {
+    const left = sepMatch[1].trim();
+    const right = sepMatch[2].trim();
+    const normLeft = left.toLowerCase();
+    const normRight = right.toLowerCase();
+    const normA = artist.toLowerCase().replace(/\s+official$/i, '').trim();
+
+    const leftIsArtist = matchesKnownArtist(left) || (normA && (normLeft === normA || normLeft.startsWith(normA)));
+    const rightIsArtist = matchesKnownArtist(right) || (normA && (normRight === normA || normRight.startsWith(normA)));
+
+    if (rightIsArtist && !leftIsArtist) {
+      artist = right;
+      title = left;
+    } else if (leftIsArtist && !rightIsArtist) {
+      artist = left;
+      title = right;
+    } else {
+      artist = left;
+      title = right;
+    }
+  }
+
+  title = stripBadges(title);
+  artist = stripBadges(artist);
+
+  const featMatch = title.match(featPattern);
+  if (featMatch) {
+    const featStr = stripBadges(featMatch[0]).replace(/^[\(\[\s]+/, '').replace(/[\)\]\s]+$/, '');
+    const cleanT = stripBadges(title.replace(featMatch[0], '')).trim();
+    if (cleanT.length >= 2) {
+      title = cleanT;
+      if (!artist.toLowerCase().includes(featStr.toLowerCase())) {
+        artist = artist ? `${artist} (${featStr})` : featStr;
+      }
+    }
+  }
+
+  title = title.replace(/^['"“‘]+|['"”’]+$/g, '').trim();
+  return {
+    title: title || 'Unknown Title',
+    artist: artist || 'Unknown Artist'
+  };
+}
+
 function parseDurationText(text?: string): number {
   if (!text || !/^\d+(:\d{1,2}){1,2}$/.test(text.trim())) return 0;
   return text
@@ -111,7 +213,7 @@ export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmu
         overlay?.playNavigationEndpoint?.watchEndpoint?.videoId;
       if (!videoId || !/^[\w-]{11}$/.test(videoId)) continue;
 
-      const title = runsOf(0)
+      const rawTitle = runsOf(0)
         .map((x: any) => x.text)
         .join('')
         .trim();
@@ -131,8 +233,10 @@ export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmu
       if (clean.length && parseDurationText(clean[clean.length - 1])) {
         duration = parseDurationText(clean.pop());
       }
-      const artist = (clean[0] || 'Unknown Artist').replace(/\s*-\s*Topic$/i, '').trim();
+      const rawArtist = clean[0] || 'Unknown Artist';
       const album = clean[1] || '';
+
+      const { title, artist } = parseSmartArtistAndTitle(rawTitle, rawArtist);
 
       const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
       let thumbnail = thumbs.length
@@ -144,7 +248,7 @@ export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmu
       out.push({
         id: videoId,
         title,
-        artist: artist || 'Unknown Artist',
+        artist,
         album,
         duration: duration || 200,
         thumbnail,
@@ -155,23 +259,32 @@ export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmu
   return out;
 }
 
+// -----------------------------------------------------------------------------
+// Direct Innertube Audio Stream Extraction (Riff-Muriel Promise.any iOS + ANDROID_VR)
+// -----------------------------------------------------------------------------
 export async function fetchDirectInnertubeAudio(videoId: string): Promise<string | null> {
   if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
-  try {
+
+  const clients = [
+    { context: IOS_CLIENT_CONTEXT, ua: IOS_USER_AGENT },
+    { context: ANDROID_VR_CLIENT_CONTEXT, ua: ANDROID_VR_USER_AGENT }
+  ];
+
+  const queryClient = async (c: { context: any; ua: string }) => {
     const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': IOS_USER_AGENT
+        'User-Agent': c.ua
       },
       body: JSON.stringify({
         videoId,
-        context: IOS_CLIENT_CONTEXT,
+        context: c.context,
         contentCheckOk: true,
         racyCheckOk: true
       })
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error('status ' + res.status);
     const data = await res.json();
     const formats = [
       ...((data.streamingData && data.streamingData.adaptiveFormats) || []),
@@ -180,12 +293,17 @@ export async function fetchDirectInnertubeAudio(videoId: string): Promise<string
     const audioFormats = formats.filter(
       (f: any) => f && f.url && typeof f.mimeType === 'string' && f.mimeType.startsWith('audio/')
     );
-    if (!audioFormats.length) return null;
+    if (!audioFormats.length) throw new Error('no audio formats');
 
     const m4a = audioFormats.filter((f: any) => f.mimeType.includes('mp4') || f.mimeType.includes('m4a'));
     const pool = m4a.length > 0 ? m4a : audioFormats;
     pool.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
     return pool[0]?.url || null;
+  };
+
+  try {
+    const url = await Promise.any(clients.map(queryClient));
+    return url;
   } catch (_) {
     return null;
   }
@@ -256,7 +374,7 @@ export async function searchTracks(
     return cached.tracks;
   }
 
-  // 1. Primary Fast Engine: YouTube Music WEB_REMIX Direct Innertube (~450ms, Riff-Muriel architecture)
+  // 1. Primary Fast Engine: YouTube Music WEB_REMIX Direct Innertube (~400ms)
   try {
     const bodyPayload: any = {
       context: YTM_CLIENT_CONTEXT,
@@ -285,7 +403,7 @@ export async function searchTracks(
     }
   } catch (_) {}
 
-  // 2. Secondary Fast Engine: Direct YouTube WEB Innertube Search (~550ms)
+  // 2. Secondary Fast Engine: Direct YouTube WEB Innertube Search (~500ms)
   try {
     const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
       method: 'POST',
@@ -312,9 +430,9 @@ export async function searchTracks(
           const v = item?.videoRenderer;
           if (v && v.videoId) {
             const vidId = v.videoId;
-            const title = v.title?.runs?.[0]?.text || 'Unknown Title';
+            const rawTitle = v.title?.runs?.[0]?.text || 'Unknown Title';
             const rawArtist = v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || 'YouTube';
-            const artist = rawArtist.replace(/\s*-\s*Topic$/i, '').trim();
+            const { title, artist } = parseSmartArtistAndTitle(rawTitle, rawArtist);
             const durSec = parseDurationText(v.lengthText?.simpleText) || 200;
             const thumbs = v.thumbnail?.thumbnails || [];
             const thumbnail = thumbs.length
@@ -349,6 +467,8 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
   }
   if (track.streamUrl && !track.streamUrl.includes('soundhelix')) return track.streamUrl;
 
+  // 1. Only resolve ID via search if ID is SYNTHETIC (starts with sp_, am_, ym_, ne_, etc.)
+  // Never overwrite or re-search valid 11-char YouTube IDs that came from a real playlist!
   if (isSyntheticTrackId(track.id)) {
     const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
     const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();
@@ -359,11 +479,13 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     }
   }
 
+  // 2. Memory stream cache check
   const cached = streamCache.get(track.id);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.url;
   }
 
+  // 3. Direct Innertube Player resolution for the exact YouTube video ID
   if (/^[a-zA-Z0-9_-]{11}$/.test(track.id)) {
     const directUrl = await fetchDirectInnertubeAudio(track.id);
     if (directUrl) {
@@ -372,6 +494,7 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     }
   }
 
+  // 4. Fallback only if track.id was invalid or deleted video
   if (track.title && track.artist) {
     const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
     const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();

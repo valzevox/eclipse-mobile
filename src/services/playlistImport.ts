@@ -1,7 +1,7 @@
 // TypeScript / src/services/playlistImport.ts / Expo React Native / Multi-Platform Playlist Importer (Direct Innertube Browse, Spotify Pathfinder & Tree Walker, Apple Music, Yandex, NetEase)
 // Ported from Riff-Muriel 43.0.0 server.js
 
-import { TrackItem, searchTracks } from './innertube';
+import { TrackItem, searchTracks, parseSmartArtistAndTitle } from './innertube';
 
 export interface ImportedPlaylist {
   id: string;
@@ -68,16 +68,16 @@ function extractTracksFromInnertubeBrowse(root: any): { name: string; tracks: Tr
       }
       if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId) && !seenIds.has(videoId)) {
         seenIds.add(videoId);
-        const title =
+        const rawTitle =
           extractText(r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text) || 'Unknown Track';
-        let artist = '';
+        let rawArtist = '';
         const col1Runs = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs;
         if (Array.isArray(col1Runs) && col1Runs.length > 0) {
-          artist = col1Runs[0].text || '';
+          rawArtist = col1Runs[0].text || '';
         } else {
-          artist = extractText(r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text);
+          rawArtist = extractText(r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text);
         }
-        artist = artist.replace(/\s*-\s*Topic$/i, '').trim() || 'Unknown Artist';
+        const { artist, title } = parseSmartArtistAndTitle(rawTitle, rawArtist);
 
         let duration = 200;
         const findDur = (obj: any) => {
@@ -107,11 +107,9 @@ function extractTracksFromInnertubeBrowse(root: any): { name: string; tracks: Tr
       const videoId = r.videoId;
       if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId) && !seenIds.has(videoId)) {
         seenIds.add(videoId);
-        const title = extractText(r.title) || 'Unknown Track';
-        const artist =
-          (extractText(r.shortBylineText) || extractText(r.ownerText) || 'Unknown Artist')
-            .replace(/\s*-\s*Topic$/i, '')
-            .trim();
+        const rawTitle = extractText(r.title) || 'Unknown Track';
+        const rawArtist = extractText(r.shortBylineText) || extractText(r.ownerText) || 'Unknown Artist';
+        const { artist, title } = parseSmartArtistAndTitle(rawTitle, rawArtist);
         const duration = r.lengthSeconds
           ? parseInt(String(r.lengthSeconds), 10)
           : parseDurationSec(extractText(r.lengthText)) || 200;
@@ -475,10 +473,12 @@ export async function importExternalPlaylist(urlOrText: string): Promise<Importe
     } catch (_) {}
   }
 
-  // 4. YouTube / YouTube Music Playlist URL (Direct Innertube youtubei/v1/browse — Zero Proxy Dependency)
-  const ytListMatch = raw.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  // 4. YouTube / YouTube Music Playlist URL or Raw ID (Direct Innertube youtubei/v1/browse — Zero Proxy Dependency)
+  const ytListMatch = raw.match(/[?&]list=([a-zA-Z0-9_-]+)/) || raw.match(/^(?:PL|VL|RD|OLAK5uy_)([a-zA-Z0-9_-]+)$/i);
   if (ytListMatch) {
-    const rawListId = ytListMatch[1];
+    const rawListId = ytListMatch[1].startsWith('PL') || ytListMatch[1].startsWith('VL') || ytListMatch[1].startsWith('RD') || ytListMatch[1].startsWith('OLAK5uy_')
+      ? ytListMatch[1]
+      : ytListMatch[0].replace(/^[?&]list=/, '');
     const browseId = rawListId.startsWith('VL') ? rawListId : `VL${rawListId}`;
     try {
       const res = await fetch('https://music.youtube.com/youtubei/v1/browse?prettyPrint=false', {
