@@ -47,11 +47,10 @@ jobs:
           MURIEL_VERSION_CODE: ${{ github.run_number }}
         run: |
           export MURIEL_VERSION_NAME="$(node -p "require('./package.json').version")"
-          keytool -genkeypair -v -keystore "$RUNNER_TEMP/eclipse-release.p12" -storetype PKCS12 -alias muriel -keyalg RSA -keysize 2048 -validity 10000 -storepass eclipse123 -keypass eclipse123 -dname "CN=Eclipse, OU=Mobile, O=Valzevox, L=HCMC, S=HCMC, C=VN"
-          export MURIEL_KEYSTORE="$RUNNER_TEMP/eclipse-release.p12"
+          export MURIEL_KEYSTORE="eclipse-release.jks"
           export MURIEL_KEYSTORE_PASSWORD="eclipse123"
           export MURIEL_KEY_PASSWORD="eclipse123"
-          export MURIEL_KEY_ALIAS="muriel"
+          export MURIEL_KEY_ALIAS="eclipse"
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon

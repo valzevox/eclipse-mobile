@@ -216,18 +216,18 @@
       filter: url(#iconTint);
     }
 
-    .muriel-icon {
+    .eclipse-icon {
       width: 118px;
       height: 118px;
       display: block;
       opacity: 0;
     }
 
-    body.intro .muriel-icon {
+    body.intro .eclipse-icon {
       animation: heroIconAnim 1.9s cubic-bezier(0.1, 0.8, 0.15, 1) forwards;
     }
 
-    .muriel-title {
+    .eclipse-title {
       font-size: 68px;
       font-weight: 700;
       letter-spacing: -0.04em;
@@ -237,24 +237,24 @@
       transition: color 0.3s ease;
     }
 
-    .muriel-title span {
+    .eclipse-title span {
       display: inline-block;
       opacity: 0;
       transform: translateY(48px) scale(1.4);
       filter: blur(20px);
     }
 
-    body.intro .muriel-title span {
+    body.intro .eclipse-title span {
       animation: heroLetterAnim 1.9s cubic-bezier(0.1, 0.8, 0.15, 1) forwards;
     }
 
-    .muriel-title span:nth-child(1) { animation-delay: 0.9s; }
-    .muriel-title span:nth-child(2) { animation-delay: 1.05s; }
-    .muriel-title span:nth-child(3) { animation-delay: 1.2s; }
-    .muriel-title span:nth-child(4) { animation-delay: 1.35s; }
-    .muriel-title span:nth-child(5) { animation-delay: 1.5s; }
-    .muriel-title span:nth-child(6) { animation-delay: 1.65s; }
-    .muriel-title span:nth-child(7) { animation-delay: 1.8s; }
+    .eclipse-title span:nth-child(1) { animation-delay: 0.9s; }
+    .eclipse-title span:nth-child(2) { animation-delay: 1.05s; }
+    .eclipse-title span:nth-child(3) { animation-delay: 1.2s; }
+    .eclipse-title span:nth-child(4) { animation-delay: 1.35s; }
+    .eclipse-title span:nth-child(5) { animation-delay: 1.5s; }
+    .eclipse-title span:nth-child(6) { animation-delay: 1.65s; }
+    .eclipse-title span:nth-child(7) { animation-delay: 1.8s; }
 
     body:not(.intro) #step1 .stacked-group {
       opacity: 0;
@@ -992,8 +992,8 @@
 @keyframes sparkleBlink { 0%, 100% { transform: scale(1); opacity: 1; } 45% { transform: scale(0.25); opacity: 0.35; } 62% { transform: scale(1.15); opacity: 1; } }
 .logo-star.dancing .s1 { animation: sparkleMain 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 .logo-star.dancing .s2 { animation: sparkleBlink 1.3s ease-in-out infinite -0.4s; }
-    .muriel-icon.logo-star { overflow: visible; }
-    .muriel-icon.logo-star .s1 { animation-duration: 3.4s !important; }
+    .eclipse-icon.logo-star { overflow: visible; }
+    .eclipse-icon.logo-star .s1 { animation-duration: 3.4s !important; }
     @media (prefers-reduced-motion: reduce) { .logo-star path { animation: none !important; } }
   </style>
 </head>
@@ -1023,10 +1023,10 @@
             <g class="shape-spin"><path class="shape-path" id="shapePath" d=""/></g>
           </svg>
           <div class="icon-tint">
-            <svg class="muriel-icon logo-star dancing" viewBox="0 0 512 512" fill="#FFFFFF" role="img" aria-label="Eclipse"><path class="s1" d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>
+            <svg class="eclipse-icon logo-star dancing" viewBox="0 0 512 512" fill="#FFFFFF" role="img" aria-label="Eclipse"><path class="s1" d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>
           </div>
         </div>
-        <h1 class="muriel-title">
+        <h1 class="eclipse-title">
           <span>e</span><span>c</span><span>l</span><span>i</span><span>p</span><span>s</span><span>e</span>
         </h1>
       </div>

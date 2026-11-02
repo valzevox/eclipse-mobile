@@ -9,7 +9,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // CI passes the run number so every build installs as an update
         versionCode((System.getenv("MURIEL_VERSION_CODE") ?: "1").toInteger())
-        versionName System.getenv("MURIEL_VERSION_NAME") ?: "1.0.11"
+        versionName System.getenv("MURIEL_VERSION_NAME") ?: "1.0.12"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -21,18 +21,18 @@ android {
     // new APKs install over old ones instead of requiring an uninstall.
     signingConfigs {
         release {
-            def ks = System.getenv("MURIEL_KEYSTORE")
-            if (ks) {
+            def ks = System.getenv("MURIEL_KEYSTORE") ?: "../eclipse-release.jks"
+            if (file(ks).exists()) {
                 storeFile file(ks)
-                storePassword System.getenv("MURIEL_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("MURIEL_KEY_ALIAS")
-                keyPassword System.getenv("MURIEL_KEY_PASSWORD")
+                storePassword System.getenv("MURIEL_KEYSTORE_PASSWORD") ?: "eclipse123"
+                keyAlias System.getenv("MURIEL_KEY_ALIAS") ?: "eclipse"
+                keyPassword System.getenv("MURIEL_KEY_PASSWORD") ?: "eclipse123"
             }
         }
     }
     buildTypes {
         release {
-            if (System.getenv("MURIEL_KEYSTORE")) signingConfig signingConfigs.release
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

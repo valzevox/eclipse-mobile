@@ -8774,7 +8774,7 @@ html.ui-rtl input::placeholder { direction: rtl; text-align: right; }
 
 /* ---------- Riff 43: player & look ---------- */
 .setting-hint { font-size: calc(12px * var(--font-scale, 1)); color: var(--md-sys-color-outline); line-height: 1.35; font-weight: 400; }
-.muriel-beta-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); line-height: 1.2; }
+.eclipse-beta-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); line-height: 1.2; }
 
 /* splash: Muriel's star draws itself, then the app fades in (app.js; desktop only, skipped in performance mode) */
 #splash { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; z-index: 999999; transition: opacity .45s cubic-bezier(0.2, 0, 0, 1); /* removed old splashGiveUp */ }

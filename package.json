@@ -1,9 +1,9 @@
 {
   "name": "eclipse-mobile",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "main": "main.js",
   "bin": {
-    "muriel": "./cli.js"
+    "eclipse": "./cli.js"
   },
   "scripts": {
     "start": "electron .",
@@ -40,18 +40,18 @@
     "hls.js": "^1.7.1",
     "tone": "^15.1.22"
   },
-  "productName": "Muriel",
-  "homepage": "https://github.com/cloverscripts/riff-muriel",
+  "productName": "Eclipse",
+  "homepage": "https://github.com/valzevox/eclipse-mobile",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cloverscripts/riff-muriel.git"
+    "url": "git+https://github.com/valzevox/eclipse-mobile.git"
   },
   "bugs": {
-    "url": "https://github.com/cloverscripts/riff-muriel/issues"
+    "url": "https://github.com/valzevox/eclipse-mobile/issues"
   },
   "build": {
-    "appId": "io.github.cloverscripts.muriel",
-    "productName": "Muriel",
+    "appId": "com.valzevox.eclipsemobile",
+    "productName": "Eclipse",
     "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "dist"
@@ -128,7 +128,7 @@
       {
         "provider": "github",
         "owner": "cloverscripts",
-        "repo": "riff-muriel",
+        "repo": "eclipse-mobile",
         "releaseType": "release"
       }
     ]
