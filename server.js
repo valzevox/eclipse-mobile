@@ -3703,6 +3703,7 @@ const crypto = require('crypto');
 const SERVER_TOKEN = crypto.randomBytes(24).toString('hex');
 
 const TOKEN_PROTECTED_ROUTES = new Set([
+  '/api/romanize',
   '/api/state',
   '/api/translate',
   '/api/i18n-batch',
@@ -4981,6 +4982,80 @@ async function handleTranslate(req, res, lines, to = 'en') {
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ success: true, translations: allTranslations }));
+}
+
+function callRomanize(line) {
+  return new Promise((resolve) => {
+    const clients = ['dict-chrome-ex', 'gtx'];
+    let idx = 0;
+    function tryNext() {
+      if (idx >= clients.length) return resolve(line);
+      const c = clients[idx++];
+      let done = false;
+      const next = () => { if (!done) { done = true; tryNext(); } };
+      const u = 'https://translate.googleapis.com/translate_a/single?client=' + c + '&sl=auto&tl=en&dt=rm&q=' + encodeURIComponent(line);
+      const req = https.get(u, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 6000 }, (res) => {
+        let b = '';
+        res.on('error', next);
+        res.on('data', chunk => b += chunk);
+        res.on('end', () => {
+          if (res.statusCode !== 200) return next();
+          try {
+            const data = JSON.parse(b);
+            let rm = '';
+            if (data && Array.isArray(data[0])) {
+              for (const part of data[0]) {
+                if (Array.isArray(part) && part[3]) { rm = part[3]; break; }
+              }
+            }
+            if (rm) { done = true; return resolve(rm); }
+          } catch (e) {}
+          next();
+        });
+      });
+      req.on('error', next);
+      req.on('timeout', () => { req.destroy(); next(); });
+    }
+    tryNext();
+  });
+}
+
+const romanizeCache = new Map();
+async function handleRomanize(req, res, lines) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, romanized: [] }));
+  }
+  const CJK_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/;
+  const out = new Array(lines.length);
+  const toFetch = [];
+  lines.forEach((l, i) => {
+    const trimmed = String(l || '').trim();
+    if (!trimmed || !CJK_RE.test(trimmed)) {
+      out[i] = trimmed;
+    } else if (romanizeCache.has(trimmed)) {
+      out[i] = romanizeCache.get(trimmed);
+    } else {
+      toFetch.push({ idx: i, text: trimmed });
+    }
+  });
+  let workerIdx = 0;
+  const worker = async () => {
+    while (workerIdx < toFetch.length) {
+      const item = toFetch[workerIdx++];
+      try {
+        const r = await callRomanize(item.text);
+        out[item.idx] = r || item.text;
+        romanizeCache.set(item.text, out[item.idx]);
+      } catch (e) {
+        out[item.idx] = item.text;
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  trimCache(romanizeCache, 500);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ success: true, romanized: out }));
 }
 
 
@@ -6279,6 +6354,21 @@ const server = http.createServer(guardHandler(async (req, res) => {
       const texts = Array.isArray(raw) ? raw.map((t) => (typeof t === 'string' ? t : t == null ? '' : String(t))) : [];
       const targetLang = typeof (payload.targetLang || payload.to) === 'string' ? (payload.targetLang || payload.to) : 'en';
       handleTranslate(req, res, texts, targetLang).catch((e) => {
+        if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: e.message }));
+      });
+    });
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/romanize' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { if (res.writableEnded) return; body += chunk; if (body.length > MAX_BODY_BYTES) { body = ''; req.removeAllListeners('data'); req.removeAllListeners('end'); res.writeHead(413, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: false, error: 'payload too large' })); req.resume(); } });
+    req.on('end', () => {
+      const payload = safeJsonParse(body, {});
+      const raw = payload.texts || payload.lines || [];
+      const texts = Array.isArray(raw) ? raw.map((t) => (typeof t === 'string' ? t : t == null ? '' : String(t))) : [];
+      handleRomanize(req, res, texts).catch((e) => {
         if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: e.message }));
       });

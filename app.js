@@ -531,6 +531,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     trAuto: localStorage.getItem('muriel_tr_auto') === 'true',
     trActive: false,
     currentTranslations: null,
+    romActive: false,
+    currentRomanized: null,
     isTvKaraokeOpen: false,
                           audioSettings: savedSound.audioSettings,
                           hqEnabled: savedSound.hqEnabled,
@@ -1687,6 +1689,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                           lyricsStatus: document.getElementById('lyrics-status'),
                           lyricsContainer: document.getElementById('lyrics-container'),
                           lyricsHint: document.getElementById('lyrics-hint'),
+                          btnRomanizeLyrics: document.getElementById('btn-romanize-lyrics'),
                           btnTranslateLyrics: document.getElementById('btn-translate-lyrics'),
                           btnTrEnabled: document.getElementById('btn-tr-enabled'),
                           selectTrLang: document.getElementById('select-tr-lang'),
@@ -3676,7 +3679,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     tick();
   }
   // anything but the crossfade itself starting a song (a skip, a pick, Previous) ends the tail quickly
-  function crossfadeOnTrackChange() {
+  let normalizerFadeInterval = null;
+function smoothNormalizeOnTrack() {
+  if (!el.nativeAudio) return;
+  const target = (typeof state.volume === "number") ? state.volume : (el.nativeAudio.volume || 1);
+  if (normalizerFadeInterval) clearInterval(normalizerFadeInterval);
+  try { el.nativeAudio.volume = target * 0.85; } catch (e) {}
+  let step = 0;
+  normalizerFadeInterval = setInterval(() => {
+    step++;
+    if (step >= 5 || !el.nativeAudio) {
+      clearInterval(normalizerFadeInterval);
+      normalizerFadeInterval = null;
+      if (el.nativeAudio) { try { el.nativeAudio.volume = target; } catch (e) {} }
+    } else {
+      if (el.nativeAudio) { try { el.nativeAudio.volume = Math.min(target, el.nativeAudio.volume + (target * 0.03)); } catch (e) {} }
+    }
+  }, 100);
+}
+
+function crossfadeOnTrackChange() {
     dropCrossfadePrep();
     if (xfade.handingOver) {
       // the next song starts silent and fades in once it plays ('playing' -> crossfadeFadeIn)
@@ -3750,6 +3772,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (context !== 'album') currentAlbumPlayRunId++;
     cancelEndFade();
     crossfadeOnTrackChange();
+    smoothNormalizeOnTrack();
     state.nextTrackPrefetched = false;
     initAudioContext();
     el.nativeAudio.preload = 'auto';
@@ -4238,6 +4261,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         div.textContent = line.text;
       }
 
+      if (state.romActive && state.currentRomanized && state.currentRomanized[index] && state.currentRomanized[index] !== line.text) {
+        const romDiv = document.createElement('div');
+        romDiv.className = 'lyric-translation lyric-romaji';
+        romDiv.dir = 'auto';
+        romDiv.textContent = state.currentRomanized[index];
+        div.appendChild(romDiv);
+      }
       if (state.trActive && state.currentTranslations && state.currentTranslations[index]) {
         const trDiv = document.createElement('div');
         trDiv.className = 'lyric-translation';
@@ -4431,7 +4461,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const lyricsTranslationCache = new Map();
 
-  async function fetchAndApplyTranslation() {
+  const lyricsRomanizeCache = new Map();
+async function fetchAndApplyRomanize() {
+  if (!state.currentTrack || !state.syncedLyrics || state.syncedLyrics.length === 0) return;
+  const track = state.currentTrack;
+  const cacheKey = String((track.title || "") + "|" + (track.artist || "")).toLowerCase();
+  if (lyricsRomanizeCache.has(cacheKey)) {
+    state.currentRomanized = lyricsRomanizeCache.get(cacheKey);
+    renderLyricsView();
+    if (el.nativeAudio) updateSyncedLyricsHighlight(el.nativeAudio.currentTime || 0);
+    return;
+  }
+  const texts = state.syncedLyrics.map(l => l.text);
+  try {
+    const res = await fetch("http://127.0.0.1:" + state.serverPort + "/api/romanize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts })
+    });
+    const data = await res.json();
+    if (data && data.success && Array.isArray(data.romanized)) {
+      lyricsRomanizeCache.set(cacheKey, data.romanized);
+      const curKey = String(((state.currentTrack && state.currentTrack.title) || "") + "|" + ((state.currentTrack && state.currentTrack.artist) || "")).toLowerCase();
+      if (curKey === cacheKey && state.romActive) {
+        state.currentRomanized = data.romanized;
+        renderLyricsView();
+        if (el.nativeAudio) updateSyncedLyricsHighlight(el.nativeAudio.currentTime || 0);
+      }
+    }
+  } catch (e) {
+    console.error("Romanization error:", e);
+  }
+}
+
+async function fetchAndApplyTranslation() {
     if (!state.currentTrack || !state.syncedLyrics || state.syncedLyrics.length === 0) return;
     const track = state.currentTrack;
     const lang = state.trLang || 'en';
@@ -4488,6 +4551,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (el.btnTranslateLyrics) {
       el.btnTranslateLyrics.classList.toggle('hidden', !state.trEnabled);
       el.btnTranslateLyrics.classList.toggle('active', !!state.trActive);
+    }
+    if (el.btnRomanizeLyrics) {
+      const hasCjk = state.syncedLyrics && state.syncedLyrics.some(l => /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(l.text));
+      el.btnRomanizeLyrics.classList.toggle('hidden', !hasCjk);
+      el.btnRomanizeLyrics.classList.toggle('active', !!state.romActive);
     }
   }
 
@@ -4856,6 +4924,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       // word timings are only looked up for word-by-word karaoke
       if (state.lyricsMode === 'word' && state.currentTrack && !state.isCustomLyrics) fetchAndUpgradeWords(state.currentTrack.title, state.currentTrack.artist, state.loadToken);
       if (el.nativeAudio) updateSyncedLyricsHighlight(el.nativeAudio.currentTime || 0);
+    });
+  }
+
+  if (el.btnRomanizeLyrics) {
+    el.btnRomanizeLyrics.addEventListener('click', () => {
+      state.romActive = !state.romActive;
+      updateLyricsTranslationUI();
+      if (state.romActive) {
+        fetchAndApplyRomanize();
+      } else {
+        state.currentRomanized = null;
+        renderLyricsView();
+        if (el.nativeAudio) updateSyncedLyricsHighlight(el.nativeAudio.currentTime || 0);
+      }
     });
   }
 
@@ -6276,6 +6358,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // everything else is blocked: the queue still moves on
     if (!pool.length) q.forEach((t, i) => { if (i !== state.queueIndex) pool.push(i); });
+    const lastArtist = (state.currentTrack && state.currentTrack.artist) ? String(state.currentTrack.artist).toLowerCase().trim() : "";
+    if (pool.length > 1 && lastArtist) {
+      const diffArtistPool = pool.filter(idx => {
+        const a = (q[idx] && q[idx].artist) ? String(q[idx].artist).toLowerCase().trim() : "";
+        return a && a !== lastArtist;
+      });
+      if (diffArtistPool.length > 0) return diffArtistPool[Math.floor(Math.random() * diffArtistPool.length)];
+    }
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
