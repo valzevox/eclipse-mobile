@@ -20248,7 +20248,7 @@ async function fetchAndApplyTranslation() {
   })();
 
   // ---- lyrics source (LRCLIB or Genius first) and word timings for word-by-word karaoke ----
-  function lyricsSourcePref() { return localStorage.getItem('muriel_lyrics_source') === 'genius' ? 'genius' : 'lrclib'; }
+  function lyricsSourcePref() { return localStorage.getItem('muriel_lyrics_source') || 'lrclib'; }
   var CJK_WORD = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
   // the words to show for a line, with their times when the line has them (null: no times)
   function lineTimedWords(line) {
@@ -20288,7 +20288,7 @@ async function fetchAndApplyTranslation() {
     let data = wordsSessionCache.get(key);
     if (!data || (data.failed && Date.now() - data.at > 10 * 60 * 1000)) {
       try {
-        const res = await fetch(`http://127.0.0.1:${state.serverPort}/api/lyrics-words?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}${dur ? `&duration=${dur}` : ''}`);
+        const res = await fetch(`http://127.0.0.1:${state.serverPort}/api/lyrics-words?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}${dur ? `&duration=${dur}` : ''}&source=${encodeURIComponent(source)}`);
         const json = await res.json();
         data = json && json.success && Array.isArray(json.lines) && json.lines.length ? { lines: json.lines } : { failed: true, at: Date.now() };
       } catch (e) {

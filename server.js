@@ -1,5 +1,6 @@
-const http = require('http');
+﻿const http = require('http');
 const https = require('https');
+const zlib = require('zlib');
 const url = require('url');
 const fs = require('fs');
 const path = require('path');
@@ -3587,7 +3588,7 @@ async function handleEncode(req, res, parsedUrl) {
 }
 
 const { parseForLyrics, pickBest } = require('./lyrics-match');
-const LRCLIB_UA = 'Muriel (https://github.com/cloverscripts/riff-muriel)';
+const LRCLIB_UA = 'Eclipse (https://github.com/valzevox/eclipse-mobile)';
 
 function lrclibJson(pathAndQuery) {
   return new Promise((resolve) => {
@@ -3670,6 +3671,515 @@ async function fetchGeniusLyrics(title, artist) {
   const html = await lyricsPageText(url);
   const text = html ? lyricsSources.extractGeniusLyrics(html) : '';
   return text || null;
+}
+
+
+function sanitizeForLyrics(title, artist) {
+  let cleanTitle = (title || '')
+    .replace(/\s*\|\s*.*$/i, '')
+    .replace(/\[.*?\]|\(.*?\)/g, '')
+    .replace(/official\s*(music)?\s*video|official\s*audio|lyrics|hd|4k|remastered|visualizer|clip\s*officiel|video\s*clip/gi, '')
+    .replace(/ft\.?|feat\.?|cùng\s*với/gi, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let cleanArtist = (artist || '')
+    .replace(/\s*\|\s*.*$/i, '')
+    .replace(/\[.*?\]|\(.*?\)/g, '')
+    .replace(/- topic|vevo|records|official/gi, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return { cleanTitle, cleanArtist };
+}
+
+function normalizeLyricMeta(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/\s*[\(\[][^)]]*(?:official|audio|video|lyrics?|prod|feat|ft|remaster|version|edit)[^)]]*[\)\]]/gi, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function isStrictLyricMatch(reqTitle, reqArtist, candTitle, candArtist) {
+  const t1 = normalizeLyricMeta(reqTitle);
+  const t2 = normalizeLyricMeta(candTitle);
+  if (!t1 || !t2 || t1 !== t2) return false;
+  const a1 = normalizeLyricMeta(reqArtist);
+  const a2 = normalizeLyricMeta(candArtist);
+  if (!a1 || !a2) return false;
+  if (a1 === a2) return true;
+  const parts1 = a1.split(/\s+/).filter(Boolean);
+  const parts2 = a2.split(/\s+/).filter(Boolean);
+  return parts1.length > 0 && parts1.join(' ') === parts2.join(' ');
+}
+
+let musixmatchToken = null;
+let musixmatchTokenExpires = 0;
+
+async function getMusixmatchToken() {
+  if (musixmatchToken && Date.now() < musixmatchTokenExpires) {
+    return musixmatchToken;
+  }
+  try {
+    const res = await fetch('https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const token = data?.message?.body?.user_token;
+      if (token) {
+        musixmatchToken = token;
+        musixmatchTokenExpires = Date.now() + 24 * 3600 * 1000;
+        return token;
+      }
+    }
+  } catch (_) {}
+  return musixmatchToken || '';
+}
+
+async function fetchMusixmatchLyrics(title, artist) {
+  try {
+    const token = await getMusixmatchToken();
+    const cleanTitle = (title || '').replace(/\s*[\(\[][^\)\]]*(?:feat|ft|remix|official|audio)[^\)\]]*[\)\]]/gi, '').trim();
+    const cleanArtist = (artist || '').replace(/ - Topic|VEVO/gi, '').trim();
+    const qTrack = encodeURIComponent(cleanTitle || title);
+    const qArtist = encodeURIComponent(cleanArtist || artist);
+    const tokParam = token ? `&usertoken=${encodeURIComponent(token)}` : '';
+
+    const macroUrl = `https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get?app_id=web-desktop-app-v1.0${tokParam}&q_track=${qTrack}&q_artist=${qArtist}`;
+    const res = await fetch(macroUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const macro = data?.message?.body?.macro_calls;
+      if (macro) {
+        const trackObj = macro['matcher.track.get']?.message?.body?.track || macro['track.get']?.message?.body?.track;
+        if (!trackObj || !isStrictLyricMatch(title, artist, trackObj.track_name, trackObj.artist_name)) {
+          return null;
+        }
+        const subList = macro['track.subtitles.get']?.message?.body?.subtitle_list;
+        const subBody = subList?.[0]?.subtitle?.subtitle_body || '';
+        const lyrBody = macro['track.lyrics.get']?.message?.body?.lyrics?.lyrics_body || '';
+        if (subBody || lyrBody) {
+          return { syncedLyrics: subBody || '', plainLyrics: lyrBody || '' };
+        }
+      }
+    }
+
+    const trackRes = await fetch(`https://apic-desktop.musixmatch.com/ws/1.1/matcher.track.get?app_id=web-desktop-app-v1.0${tokParam}&q_track=${qTrack}&q_artist=${qArtist}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    }).catch(() => null);
+    if (trackRes && trackRes.ok) {
+      const trackData = await trackRes.json().catch(() => null);
+      const trackObj = trackData?.message?.body?.track;
+      if (!trackObj || !isStrictLyricMatch(title, artist, trackObj.track_name, trackObj.artist_name)) {
+        return null;
+      }
+    } else {
+      return null;
+    }
+
+    let synced = '';
+    let plain = '';
+    const subUrl = `https://apic-desktop.musixmatch.com/ws/1.1/matcher.subtitle.get?app_id=web-desktop-app-v1.0${tokParam}&q_track=${qTrack}&q_artist=${qArtist}`;
+    const subRes = await fetch(subUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }).catch(() => null);
+    if (subRes && subRes.ok) {
+      const subData = await subRes.json().catch(() => null);
+      synced = subData?.message?.body?.subtitle?.subtitle_body || '';
+    }
+
+    const lyrUrl = `https://apic-desktop.musixmatch.com/ws/1.1/matcher.lyrics.get?app_id=web-desktop-app-v1.0${tokParam}&q_track=${qTrack}&q_artist=${qArtist}`;
+    const lyrRes = await fetch(lyrUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }).catch(() => null);
+    if (lyrRes && lyrRes.ok) {
+      const lyrData = await lyrRes.json().catch(() => null);
+      plain = lyrData?.message?.body?.lyrics?.lyrics_body || '';
+    }
+
+    if (synced || plain) {
+      return { syncedLyrics: synced, plainLyrics: plain };
+    }
+  } catch (_) {}
+  return null;
+}
+
+function fetchSyncLrc(title, artist, duration = 0) {
+  return new Promise(async (resolve) => {
+    const { cleanTitle, cleanArtist } = sanitizeForLyrics(title, artist);
+    const t = cleanTitle || title || '';
+    const a = cleanArtist || artist || '';
+    if (!t) return resolve(null);
+
+    const queryPair = (trackName, artistName) => new Promise((resPair) => {
+      const durParam = (typeof duration === 'number' && duration > 10) ? `&duration=${Math.round(duration)}` : '';
+      const artistParam = artistName ? `&artist=${encodeURIComponent(artistName)}` : '';
+      const url = `https://api.synclrc.dev/lyrics?track=${encodeURIComponent(trackName)}${artistParam}${durParam}`;
+
+      const req = https.get(url, {
+        headers: { 'User-Agent': 'EclipseMusic/1.0 (SyncLRC)' },
+        timeout: 6000
+      }, (res) => {
+        let d = '';
+        const dec = new StringDecoder('utf8');
+        res.on('data', c => d += dec.write(c));
+        res.on('end', () => {
+          try {
+            if (res.statusCode === 200) {
+              const j = JSON.parse(d);
+              if (j.instrumental) return resPair({ instrumental: true, syncedLyrics: '', plainLyrics: '', karaoke: '' });
+              const synced = j.synced || '';
+              const karaoke = j.karaoke || '';
+              const plain = j.plain || '';
+              if (synced || karaoke || plain) {
+                return resPair({
+                  syncedLyrics: karaoke || synced || plain,
+                  plainLyrics: plain,
+                  karaoke: karaoke,
+                  rawSynced: synced
+                });
+              }
+            }
+          } catch (_) {}
+          resPair(null);
+        });
+      });
+      req.on('timeout', () => { req.destroy(); resPair(null); });
+      req.on('error', () => resPair(null));
+    });
+
+    let result = await queryPair(t, a);
+    if (!result && a && a.length > 1) {
+      result = await queryPair(a, t);
+    }
+    if (!result && a) {
+      result = await queryPair(t, '');
+    }
+    resolve(result);
+  });
+}
+
+function parseKaraokeToWords(karaokeStr) {
+  if (!karaokeStr) return [];
+  const lines = karaokeStr.split('\n');
+  const result = [];
+  const lrcRegex = /^\[(\d+):(\d+(\.\d+)?)\](.*)$/;
+  const tagRegex = /<(\d+):(\d+(?:\.\d+)?)>/g;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = lrcRegex.exec(trimmed);
+    if (!m) continue;
+    const min = parseInt(m[1], 10);
+    const sec = parseFloat(m[2]);
+    const lineStart = min * 60 + sec;
+    const rest = m[4];
+
+    const tags = [];
+    let tm;
+    while ((tm = tagRegex.exec(rest)) !== null) {
+      tags.push({ time: parseInt(tm[1], 10) * 60 + parseFloat(tm[2]), endIdx: tm.index + tm[0].length });
+    }
+
+    const words = [];
+    for (let i = 0; i < tags.length; i++) {
+      const cur = tags[i];
+      const nextIdx = (i + 1 < tags.length) ? rest.indexOf('<', cur.endIdx) : rest.length;
+      const wText = rest.substring(cur.endIdx, nextIdx === -1 ? rest.length : nextIdx);
+      const wEnd = (i + 1 < tags.length) ? tags[i + 1].time : lineStart + 4.0;
+      if (wText.trim()) {
+        words.push({ text: wText.trim(), start: cur.time, end: Math.max(wEnd, cur.time + 0.1) });
+      }
+    }
+
+    if (words.length > 0) {
+      result.push({
+        start: lineStart,
+        end: words[words.length - 1].end,
+        text: words.map(w => w.text).join(' '),
+        words: words
+      });
+    }
+  }
+  return result;
+}
+
+async function fetchKugouLyrics(title, artist, durationSec = 0) {
+  try {
+    const durMs = Math.round((durationSec || 0) * 1000);
+    const searchUrl = `http://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${encodeURIComponent(artist + ' - ' + title)}&duration=${durMs}&hash=`;
+    const res = await fetch(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const candidates = Array.isArray(json?.candidates) ? json.candidates : [];
+    const validCandidates = candidates.filter(cand =>
+      cand && isStrictLyricMatch(title, artist, cand.songname || cand.filename?.split('-')[1], cand.singername || cand.filename?.split('-')[0])
+    );
+    if (!validCandidates.length) return null;
+    const cand = validCandidates[0];
+    if (!cand || !cand.id || !cand.accesskey) return null;
+
+    const dlUrl = `http://lyrics.kugou.com/download?ver=1&client=pc&id=${cand.id}&accesskey=${cand.accesskey}&fmt=lrc&charset=utf8`;
+    const dlRes = await fetch(dlUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+    if (!dlRes.ok) return null;
+    const dlJson = await dlRes.json();
+    if (!dlJson || !dlJson.content) return null;
+
+    let lrcText = Buffer.from(dlJson.content, 'base64').toString('utf8');
+    lrcText = lrcText.replace(/^\[(id|ti|ar|al|by|hash|sign|qq|total|offset):[^\]]*\]\r?\n?/gim, '').trim();
+
+    if (lrcText) {
+      return { syncedLyrics: lrcText, plainLyrics: '' };
+    }
+  } catch (_) {}
+  return null;
+}
+
+function fetchNeteaseLyrics(title, artist, targetDuration) {
+  return new Promise((resolve) => {
+    const cleanQuery = (title + ' ' + artist)
+      .replace(/\s*\(feat\.[^)]*\)/gi, '')
+      .replace(/\s*\[feat\.[^\]]*\]/gi, '')
+      .replace(/\s*\(featuring[^)]*\)/gi, '')
+      .replace(/\s*feat\.[^\s]+/gi, '')
+      .replace(/\s*-\s*remaster(ed)?(\s*\d+)?/gi, '')
+      .replace(/\s*\(live[^)]*\)/gi, '')
+      .replace(/\s*\[live[^\]]*\]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const fetchLyric = (songId) => {
+      const lyricUrl = `http://music.163.com/api/song/lyric?id=${songId}&lv=1&kv=1&tv=-1`;
+      const lReq = http.get(lyricUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://music.163.com' },
+        timeout: 8000
+      }, res => {
+        let d = '';
+        res.on('data', c => d += c);
+        res.on('end', () => {
+          if (res.statusCode !== 200) return resolve(null);
+          try {
+            const j = JSON.parse(d);
+            const lrc = j.lrc && j.lrc.lyric;
+            if (lrc && /\[\d{2}:\d{2}/.test(lrc)) {
+              return resolve({ syncedLyrics: lrc, plainLyrics: '' });
+            } else if (lrc) {
+              return resolve({ syncedLyrics: '', plainLyrics: lrc });
+            }
+          } catch (_) {}
+          resolve(null);
+        });
+      });
+      lReq.on('timeout', () => { lReq.destroy(); resolve(null); });
+      lReq.on('error', () => resolve(null));
+    };
+
+    const searchUrl = `http://music.163.com/api/search/get/web?s=${encodeURIComponent(cleanQuery)}&type=1&limit=5`;
+    const u = new URL(searchUrl);
+    const sReq = http.get({
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://music.163.com' },
+      timeout: 8000
+    }, res => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        if (res.statusCode !== 200) return resolve(null);
+        try {
+          const j = JSON.parse(d);
+          const songs = (j.result && j.result.songs) || [];
+          const validSongs = songs.filter(s =>
+            s && isStrictLyricMatch(title, artist, s.name, (s.artists || s.ar || []).map(a => a.name).join(' '))
+          );
+          if (!validSongs.length) return resolve(null);
+          const matched = validSongs.find(song => {
+            if (targetDuration && targetDuration > 0) {
+              const songDur = (song.dt || song.duration || 0) / 1000;
+              if (Math.abs(songDur - targetDuration) > 4) return false;
+            }
+            return true;
+          }) || validSongs[0];
+          if (matched && matched.id) {
+            return fetchLyric(matched.id);
+          }
+        } catch (_) {}
+        resolve(null);
+      });
+    });
+    sReq.on('timeout', () => { sReq.destroy(); resolve(null); });
+    sReq.on('error', () => resolve(null));
+  });
+}
+
+let zingCookieCache = '';
+let zingCookieExpiry = 0;
+
+function fetchZingCookies() {
+  if (zingCookieCache && Date.now() < zingCookieExpiry) {
+    return Promise.resolve(zingCookieCache);
+  }
+  return new Promise((resolve) => {
+    const req = https.get('https://zingmp3.vn', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      timeout: 5000
+    }, (res) => {
+      const setCookies = res.headers['set-cookie'] || [];
+      zingCookieCache = setCookies.map(c => c.split(';')[0]).join('; ');
+      zingCookieExpiry = Date.now() + 3600000;
+      resolve(zingCookieCache);
+    });
+    req.on('error', () => resolve(''));
+    req.on('timeout', () => { req.destroy(); resolve(''); });
+  });
+}
+
+function fetchZingMp3Lyrics(title, artist) {
+  return new Promise(async (resolve) => {
+    try {
+      const cleanTitle = (title || '')
+        .replace(/\s*\(feat\.[^)]*\)/gi, '')
+        .replace(/\s*\[feat\.[^\]]*\]/gi, '')
+        .replace(/\s*\(ft\.[^)]*\)/gi, '')
+        .replace(/\s*\[ft\.[^\]]*\]/gi, '')
+        .replace(/\s*feat\.[^\s]+/gi, '')
+        .replace(/\s*ft\.[^\s]+/gi, '')
+        .replace(/\s*-\s*Official.*$/i, '')
+        .replace(/\s*\(Official.*?\)/gi, '')
+        .replace(/\s*\[Official.*?\]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const cleanArtist = (artist || '')
+        .replace(/\s*-\s*Topic$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const candidates = [];
+      if (cleanTitle && cleanArtist) candidates.push(`${cleanTitle} ${cleanArtist}`.trim());
+      if (cleanTitle) candidates.push(cleanTitle);
+
+      let foundSongId = null;
+      for (const query of candidates) {
+        try {
+          const searchUrl = `https://ac.mp3.zing.vn/complete?type=artist,song,key,hub&num=5&query=${encodeURIComponent(query)}`;
+          const songs = await new Promise((resSearch) => {
+            const searchReq = https.get(searchUrl, {
+              rejectUnauthorized: false,
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              },
+              timeout: 5000
+            }, (res) => {
+              let raw = '';
+              res.on('data', c => raw += c);
+              res.on('end', () => {
+                try {
+                  const data = JSON.parse(raw);
+                  resSearch(data?.data?.[0]?.song || []);
+                } catch (_) { resSearch([]); }
+              });
+            });
+            searchReq.on('error', () => resSearch([]));
+            searchReq.on('timeout', () => { searchReq.destroy(); resSearch([]); });
+          });
+          if (Array.isArray(songs) && songs.length > 0) {
+            const normReqT = String(cleanTitle || title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+            const matchedSong = songs.find(s => {
+              if (!s || !s.id) return false;
+              const sName = String(s.name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+              if (!normReqT || !sName) return false;
+              const fwReq = normReqT.split(' ')[0];
+              const fwSong = sName.split(' ')[0];
+              return sName.includes(normReqT) || normReqT.includes(sName) || fwReq === fwSong;
+            });
+            if (matchedSong) {
+              foundSongId = matchedSong.id;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!foundSongId) return resolve(null);
+
+      const VERSION = '1.6.34';
+      const SECRET_KEY = '2aa2d1c561e809b267f3638c4a307aab';
+      const API_KEY = '88265e23d4284f25963e6eedac8fbfa3';
+      const ctime = String(Math.floor(Date.now() / 1000));
+      const path = '/api/v2/lyric/get/lyric';
+      const hmacInput = path + crypto.createHash('sha256').update(`ctime=${ctime}id=${foundSongId}version=${VERSION}`).digest('hex');
+      const sig = crypto.createHmac('sha512', SECRET_KEY).update(Buffer.from(hmacInput, 'utf8')).digest('hex');
+      const cookie = await fetchZingCookies();
+
+      const lyricUrl = `https://zingmp3.vn${path}?id=${foundSongId}&ctime=${ctime}&version=${VERSION}&apiKey=${API_KEY}&sig=${sig}`;
+      const lyricReq = https.get(lyricUrl, {
+        rejectUnauthorized: false,
+        headers: {
+          'Cookie': cookie || '',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://zingmp3.vn/'
+        },
+        timeout: 6000
+      }, (lRes) => {
+        const chunks = [];
+        lRes.on('data', c => chunks.push(c));
+        lRes.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          const handleJson = (jsonObj) => {
+            if (jsonObj?.data?.sentences && Array.isArray(jsonObj.data.sentences)) {
+              const lrc = jsonObj.data.sentences.map(s => {
+                if (!s.words || s.words.length === 0) return '';
+                const lineStart = s.words[0].startTime;
+                const lMin = String(Math.floor(lineStart / 60000)).padStart(2, '0');
+                const lSec = String(Math.floor((lineStart % 60000) / 1000)).padStart(2, '0');
+                const lMs = String(Math.floor((lineStart % 1000) / 10)).padStart(2, '0');
+                const wordsTagged = s.words.map(w => {
+                  const wStart = w.startTime;
+                  const wMin = String(Math.floor(wStart / 60000)).padStart(2, '0');
+                  const wSec = String(Math.floor((wStart % 60000) / 1000)).padStart(2, '0');
+                  const wMs = String(Math.floor((wStart % 1000) / 10)).padStart(2, '0');
+                  return `<${wMin}:${wSec}.${wMs}>${w.data || ''}`;
+                }).join(' ');
+                return `[${lMin}:${lSec}.${lMs}] ${wordsTagged}`;
+              }).filter(Boolean).join('\n');
+              if (lrc && lrc.trim().length > 0) return resolve(lrc);
+            }
+            if (jsonObj?.data?.file) {
+              https.get(jsonObj.data.file, { timeout: 5000 }, (fRes) => {
+                let fData = '';
+                fRes.on('data', c => fData += c);
+                fRes.on('end', () => resolve(fData.trim().length > 0 ? fData : null));
+              }).on('error', () => resolve(null));
+              return;
+            }
+            resolve(null);
+          };
+
+          if (buf[0] === 0x1f && buf[1] === 0x8b) {
+            zlib.gunzip(buf, (err, decoded) => {
+              if (err) return resolve(null);
+              try { handleJson(JSON.parse(decoded.toString('utf-8'))); } catch (_) { resolve(null); }
+            });
+          } else {
+            try { handleJson(JSON.parse(buf.toString('utf-8'))); } catch (_) { resolve(null); }
+          }
+        });
+      });
+      lyricReq.on('error', () => resolve(null));
+      lyricReq.on('timeout', () => { lyricReq.destroy(); resolve(null); });
+    } catch (_) {
+      resolve(null);
+    }
+  });
 }
 
 // NetEase's word-timed lyrics for karaoke: [{ start, end, text, words: [{ text, start, end }] }] or null
@@ -3783,13 +4293,12 @@ function getCustomLyricsPath(title, artist) {
 }
 
 function getFetchedLyricsPath(title, artist, source = 'lrclib') {
-  return path.join(LYRICS_DIR, lyricsKey(title, artist) + (source === 'genius' ? '_genius' : '') + '.lrc');
+  return path.join(LYRICS_DIR, lyricsKey(title, artist) + (source === 'genius' ? '_genius' : `_${source}`) + '.lrc');
 }
 
 async function handleLyrics(req, res, title, artist, allowOnline = true, duration = 0, source = 'lrclib') {
-  // Settings → Lyrics source picks which site is asked first; the other one is the fallback
-  const order = source === 'genius' ? ['genius', 'lrclib'] : ['lrclib', 'genius'];
-  const cacheKey = order[0] === 'genius' ? `${artist}:${title}:genius` : `${artist}:${title}`;
+  const normSource = source || 'lrclib';
+  const cacheKey = `${artist}:${title}:${normSource}`;
   let cached = lyricsCache.get(cacheKey);
   if (cached && cached.expires && Date.now() > cached.expires) {
     lyricsCache.delete(cacheKey);
@@ -3818,29 +4327,26 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
   };
 
   try {
-  let customPath = getCustomLyricsPath(title, artist);
-  if (!fs.existsSync(customPath) && /^[\x00-\x7F]*$/.test((title || '') + (artist || ''))) {
-    const legacyPath = legacyCustomLyricsPath(title, artist);
-    if (fs.existsSync(legacyPath)) {
-      customPath = legacyPath;
-    }
-  }
-
-  if (fs.existsSync(customPath)) {
-    try {
-      const customLyrics = await fs.promises.readFile(customPath, 'utf-8');
-      if (lyricsCache.get(cacheKey) === inFlightEntry) {
-        lyricsCache.set(cacheKey, { text: customLyrics, isCustom: true });
+    let customPath = getCustomLyricsPath(title, artist);
+    if (!fs.existsSync(customPath) && /^[\x00-\x7F]*$/.test((title || '') + (artist || ''))) {
+      const legacyPath = legacyCustomLyricsPath(title, artist);
+      if (fs.existsSync(legacyPath)) {
+        customPath = legacyPath;
       }
-      return sendLyrics(customLyrics, true);
-    } catch (e) {}
-  }
+    }
 
-  // each site's lyrics are saved in their own file; the preferred site (saved or asked) comes first, then the other
-  let rawLyrics = null;
-  for (const backend of order) {
-    let fetchedLyricsPath = getFetchedLyricsPath(title, artist, backend);
-    if (backend === 'lrclib' && !fs.existsSync(fetchedLyricsPath) && /^[\x00-\x7F]*$/.test((title || '') + (artist || ''))) {
+    if (fs.existsSync(customPath)) {
+      try {
+        const customLyrics = await fs.promises.readFile(customPath, 'utf-8');
+        if (lyricsCache.get(cacheKey) === inFlightEntry) {
+          lyricsCache.set(cacheKey, { text: customLyrics, isCustom: true });
+        }
+        return sendLyrics(customLyrics, true);
+      } catch (e) {}
+    }
+
+    let fetchedLyricsPath = getFetchedLyricsPath(title, artist, normSource);
+    if (normSource === 'lrclib' && !fs.existsSync(fetchedLyricsPath) && /^[\x00-\x7F]*$/.test((title || '') + (artist || ''))) {
       const legacyFetched = legacyFetchedLyricsPath(title, artist);
       if (fs.existsSync(legacyFetched)) {
         fetchedLyricsPath = legacyFetched;
@@ -3857,31 +4363,146 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       } catch (e) {}
     }
 
-    if (!allowOnline) continue;
-
-    try {
-      rawLyrics = backend === 'genius' ? await fetchGeniusLyrics(title, artist) : await fetchLyricsDirect(title, artist, duration);
-    } catch (err) {
-      rawLyrics = null;
+    if (!allowOnline) {
+      return sendLyrics('');
     }
+
+    let rawLyrics = null;
+    let successfulBackend = null;
+
+    if (normSource === 'genius') {
+      rawLyrics = await fetchGeniusLyrics(title, artist);
+      successfulBackend = 'genius';
+    } else if (normSource === 'synclrc') {
+      const sl = await fetchSyncLrc(title, artist, duration);
+      rawLyrics = sl ? (sl.syncedLyrics || sl.plainLyrics || '') : '';
+      successfulBackend = 'synclrc';
+    } else if (normSource === 'musixmatch') {
+      const mm = await fetchMusixmatchLyrics(title, artist);
+      rawLyrics = mm ? (mm.syncedLyrics || mm.plainLyrics || '') : '';
+      successfulBackend = 'musixmatch';
+    } else if (normSource === 'kugou') {
+      const kg = await fetchKugouLyrics(title, artist, duration);
+      rawLyrics = kg ? (kg.syncedLyrics || kg.plainLyrics || '') : '';
+      successfulBackend = 'kugou';
+    } else if (normSource === 'netease') {
+      const ne = await fetchNeteaseLyrics(title, artist, duration);
+      rawLyrics = ne ? (ne.syncedLyrics || ne.plainLyrics || '') : '';
+      successfulBackend = 'netease';
+    } else if (normSource === 'zingmp3') {
+      const zm = await fetchZingMp3Lyrics(title, artist);
+      rawLyrics = typeof zm === 'string' ? zm : (zm?.syncedLyrics || zm?.plainLyrics || '');
+      successfulBackend = 'zingmp3';
+    } else {
+      // Primary: LRCLIB
+      let plainFallback = '';
+      const lrcText = await fetchLyricsDirect(title, artist, duration);
+      if (lrcText && /\[\d{2}:\d{2}/.test(lrcText)) {
+        rawLyrics = lrcText;
+        successfulBackend = 'lrclib';
+      } else if (lrcText) {
+        plainFallback = plainFallback || lrcText;
+      }
+
+      // Fallback 1: SyncLRC
+      if (!rawLyrics) {
+        try {
+          const sl = await fetchSyncLrc(title, artist, duration);
+          const slText = sl ? (sl.syncedLyrics || sl.plainLyrics || '') : '';
+          if (slText && /\[\d{2}:\d{2}/.test(slText)) {
+            rawLyrics = slText;
+            successfulBackend = 'synclrc';
+          } else if (slText) {
+            plainFallback = plainFallback || slText;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 2: Musixmatch
+      if (!rawLyrics) {
+        try {
+          const mm = await fetchMusixmatchLyrics(title, artist);
+          if (mm?.syncedLyrics && /\[\d{2}:\d{2}/.test(mm.syncedLyrics)) {
+            rawLyrics = mm.syncedLyrics;
+            successfulBackend = 'musixmatch';
+          } else if (mm?.plainLyrics) {
+            plainFallback = plainFallback || mm.plainLyrics;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 3: NetEase
+      if (!rawLyrics) {
+        try {
+          const ne = await fetchNeteaseLyrics(title, artist, duration);
+          if (ne?.syncedLyrics && /\[\d{2}:\d{2}/.test(ne.syncedLyrics)) {
+            rawLyrics = ne.syncedLyrics;
+            successfulBackend = 'netease';
+          } else if (ne?.plainLyrics) {
+            plainFallback = plainFallback || ne.plainLyrics;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 4: KuGou
+      if (!rawLyrics) {
+        try {
+          const kg = await fetchKugouLyrics(title, artist, duration);
+          if (kg?.syncedLyrics && /\[\d{2}:\d{2}/.test(kg.syncedLyrics)) {
+            rawLyrics = kg.syncedLyrics;
+            successfulBackend = 'kugou';
+          } else if (kg?.plainLyrics) {
+            plainFallback = plainFallback || kg.plainLyrics;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 5: Zing MP3
+      if (!rawLyrics) {
+        try {
+          const zm = await fetchZingMp3Lyrics(title, artist);
+          const zmText = typeof zm === 'string' ? zm : (zm?.syncedLyrics || zm?.plainLyrics || '');
+          if (zmText && /\[\d{2}:\d{2}/.test(zmText)) {
+            rawLyrics = zmText;
+            successfulBackend = 'zingmp3';
+          } else if (zmText) {
+            plainFallback = plainFallback || zmText;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 6: Genius or plain fallback
+      if (!rawLyrics) {
+        if (plainFallback) {
+          rawLyrics = plainFallback;
+        } else {
+          try {
+            const gn = await fetchGeniusLyrics(title, artist);
+            if (gn) {
+              rawLyrics = gn;
+              successfulBackend = 'genius';
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     if (rawLyrics && rawLyrics.trim().length > 0) {
-      try {
-        await fs.promises.writeFile(fetchedLyricsPath, rawLyrics, 'utf-8');
-      } catch (e) {}
-      break;
+      if (successfulBackend && successfulBackend !== 'genius') {
+        try {
+          await fs.promises.writeFile(fetchedLyricsPath, rawLyrics, 'utf-8');
+        } catch (e) {}
+      }
+      if (lyricsCache.get(cacheKey) === inFlightEntry) {
+        lyricsCache.set(cacheKey, { text: rawLyrics, isCustom: false });
+      }
+      return sendLyrics(rawLyrics);
     }
-  }
 
-  if (!allowOnline) {
-    return sendLyrics('');
-  }
-
-  if (lyricsCache.get(cacheKey) === inFlightEntry) {
-    // "nothing found" is also what a network hiccup looks like: look again after 10 minutes
-    // instead of showing no lyrics for this song until the app restarts
-    lyricsCache.set(cacheKey, rawLyrics ? { text: rawLyrics, isCustom: false } : { text: rawLyrics, isCustom: false, expires: Date.now() + 10 * 60 * 1000 });
-  }
-  return sendLyrics(rawLyrics);
+    if (lyricsCache.get(cacheKey) === inFlightEntry) {
+      lyricsCache.set(cacheKey, { text: null, isCustom: false, expires: Date.now() + 10 * 60 * 1000 });
+    }
+    return sendLyrics(null);
   } finally {
     if (!outcome) {
       outcome = { success: true, lyrics: '', isCustom: false };
@@ -6969,7 +7590,7 @@ const server = http.createServer(guardHandler(async (req, res) => {
     const artist = parsedUrl.query.artist || '';
     const allowOnline = parsedUrl.query.online !== '0';
     const duration = Number(parsedUrl.query.duration) || 0;
-    const source = parsedUrl.query.source === 'genius' ? 'genius' : 'lrclib';
+    const source = parsedUrl.query.source || 'lrclib';
     return handleLyrics(req, res, title, artist, allowOnline, duration, source);
   }
 
@@ -6978,8 +7599,31 @@ const server = http.createServer(guardHandler(async (req, res) => {
     const title = parsedUrl.query.title || '';
     const artist = parsedUrl.query.artist || '';
     const duration = Number(parsedUrl.query.duration) || 0;
+    const wordSource = parsedUrl.query.source || 'auto';
     let lines = null;
-    try { lines = await fetchNetEaseWords(title, artist, duration); } catch (e) {}
+    if (wordSource === 'synclrc') {
+      try {
+        const sl = await fetchSyncLrc(title, artist, duration);
+        if (sl && sl.karaoke) {
+          const parsed = parseKaraokeToWords(sl.karaoke);
+          if (parsed && parsed.length > 0) lines = parsed;
+        }
+      } catch (_) {}
+    } else if (wordSource === 'netease') {
+      try { lines = await fetchNetEaseWords(title, artist, duration); } catch (e) {}
+    } else {
+      // Auto: NetEase first (YRC word timings), with SyncLRC fallback
+      try { lines = await fetchNetEaseWords(title, artist, duration); } catch (e) {}
+      if (!lines) {
+        try {
+          const sl = await fetchSyncLrc(title, artist, duration);
+          if (sl && sl.karaoke) {
+            const parsed = parseKaraokeToWords(sl.karaoke);
+            if (parsed && parsed.length > 0) lines = parsed;
+          }
+        } catch (_) {}
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ success: !!(lines && lines.length), lines: lines || [] }));
   }
