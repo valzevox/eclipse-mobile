@@ -1,4 +1,5 @@
-// TypeScript / src/services/innertube.ts / Expo React Native / YouTube Music, SoundCloud & Regional Trending Resolver
+// TypeScript / src/services/innertube.ts / Expo React Native / Direct Innertube iOS Stream Resolver & Zero-Latency Search
+// Architected after Riff-Muriel 43.0.0 fetchDirectYoutubeStreamServer
 
 import { searchSoundCloud, resolveSoundCloudStream } from './soundcloud';
 
@@ -16,6 +17,21 @@ export interface TrackItem {
 
 export type ChartRegion = 'global' | 'vn' | 'jp' | 'kr';
 
+const IOS_CLIENT_CONTEXT = {
+  client: {
+    clientName: 'IOS',
+    clientVersion: '20.03.02',
+    deviceMake: 'Apple',
+    deviceModel: 'iPhone16,2',
+    osName: 'iOS',
+    osVersion: '18.2.1.22C161',
+    hl: 'en',
+    gl: 'US'
+  }
+};
+
+const IOS_USER_AGENT = 'com.google.ios.youtube/20.03.02 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X;)';
+
 const PIPED_INSTANCES = [
   'https://pipedapi.kavin.rocks',
   'https://pipedapi.tokhmi.xyz',
@@ -29,6 +45,86 @@ const INVIDIOUS_INSTANCES = [
   'https://invidious.privacyredirect.com'
 ];
 
+// In-memory stream cache for zero-latency prefetch & instant re-play (3-hour TTL)
+const streamCache = new Map<string, { url: string; timestamp: number }>();
+const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+
+export function isSyntheticTrackId(id: string): boolean {
+  if (!id) return true;
+  return (
+    id.startsWith('sp_') ||
+    id.startsWith('am_') ||
+    id.startsWith('ym_') ||
+    id.startsWith('ne_') ||
+    id.startsWith('pl_') ||
+    id.includes(':') ||
+    id.includes('/') ||
+    id.length !== 11
+  );
+}
+
+export async function fetchDirectInnertubeAudio(videoId: string): Promise<string | null> {
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': IOS_USER_AGENT
+      },
+      body: JSON.stringify({
+        videoId,
+        context: IOS_CLIENT_CONTEXT,
+        contentCheckOk: true,
+        racyCheckOk: true
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const formats = [
+      ...((data.streamingData && data.streamingData.adaptiveFormats) || []),
+      ...((data.streamingData && data.streamingData.formats) || [])
+    ];
+    const audioFormats = formats.filter(
+      (f: any) => f && f.url && typeof f.mimeType === 'string' && f.mimeType.startsWith('audio/')
+    );
+    if (!audioFormats.length) return null;
+
+    // Mobile hardware acceleration prefers MP4 / M4A (AAC), fallback to WebM Opus
+    const m4a = audioFormats.filter((f: any) => f.mimeType.includes('mp4') || f.mimeType.includes('m4a'));
+    const pool = m4a.length > 0 ? m4a : audioFormats;
+    pool.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+    return pool[0]?.url || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function matchYouTubeVideoId(query: string): Promise<string | null> {
+  if (!query || !query.trim()) return null;
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': IOS_USER_AGENT
+      },
+      body: JSON.stringify({
+        query: query.trim(),
+        context: IOS_CLIENT_CONTEXT
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = JSON.stringify(data);
+    const regex = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
+    const match = regex.exec(raw);
+    return match ? match[1] : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 export async function searchTracks(
   query: string,
   platform: 'ytmusic' | 'youtube' | 'soundcloud' = 'ytmusic'
@@ -40,6 +136,7 @@ export async function searchTracks(
   }
   const q = encodeURIComponent(query.trim());
 
+  // 1. Try Piped API
   const filter = platform === 'ytmusic' ? 'music_songs' : 'videos';
   for (const base of PIPED_INSTANCES) {
     try {
@@ -65,6 +162,7 @@ export async function searchTracks(
     } catch (_) {}
   }
 
+  // 2. Try Invidious API
   for (const base of INVIDIOUS_INSTANCES) {
     try {
       const res = await fetch(`${base}/api/v1/search?q=${q}&type=video`);
@@ -85,12 +183,25 @@ export async function searchTracks(
     } catch (_) {}
   }
 
+  // 3. Fallback: Direct Innertube Search Regex Resolver
+  try {
+    const matchedVid = await matchYouTubeVideoId(query);
+    if (matchedVid) {
+      return [
+        {
+          id: matchedVid,
+          title: query.trim(),
+          artist: 'YouTube Music',
+          duration: 210,
+          thumbnail: `https://i.ytimg.com/vi/${matchedVid}/hqdefault.jpg`,
+          platform
+        }
+      ];
+    }
+  } catch (_) {}
+
   return getDefaultTrendingTracks();
 }
-
-// In-memory stream cache for zero-latency prefetch (3-hour TTL)
-const streamCache = new Map<string, { url: string; timestamp: number }>();
-const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
 
 export async function resolveStreamUrl(track: TrackItem): Promise<string> {
   if (track.localUri) return track.localUri;
@@ -98,13 +209,51 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     const resolved = await resolveSoundCloudStream(track.streamUrl);
     if (resolved) return resolved;
   }
-  if (track.streamUrl) return track.streamUrl;
+  if (track.streamUrl && !track.streamUrl.includes('soundhelix')) return track.streamUrl;
 
+  // 1. If ID is synthetic (Spotify `sp_...`, Apple `am_...`, NetEase `ne_...`, Yandex `ym_...`), match real YouTube video
+  if (isSyntheticTrackId(track.id)) {
+    const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
+    const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();
+    const searchQuery = `${cleanArtist} - ${cleanTitle}`.trim();
+    const matchedId = await matchYouTubeVideoId(searchQuery);
+    if (matchedId) {
+      track.id = matchedId;
+    }
+  }
+
+  // 2. Memory cache check
   const cached = streamCache.get(track.id);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.url;
   }
 
+  // 3. Primary Engine: Direct YouTube Innertube iOS endpoint (Riff-Muriel 43.0.0 Architecture)
+  if (/^[a-zA-Z0-9_-]{11}$/.test(track.id)) {
+    const directUrl = await fetchDirectInnertubeAudio(track.id);
+    if (directUrl) {
+      streamCache.set(track.id, { url: directUrl, timestamp: Date.now() });
+      return directUrl;
+    }
+  }
+
+  // 4. Secondary fallback: If track.id failed or was wrong, retry matching once by query
+  if (track.title && track.artist) {
+    const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
+    const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();
+    const searchQuery = `${cleanArtist} - ${cleanTitle}`.trim();
+    const matchedId = await matchYouTubeVideoId(searchQuery);
+    if (matchedId && matchedId !== track.id) {
+      track.id = matchedId;
+      const directUrl = await fetchDirectInnertubeAudio(matchedId);
+      if (directUrl) {
+        streamCache.set(track.id, { url: directUrl, timestamp: Date.now() });
+        return directUrl;
+      }
+    }
+  }
+
+  // 5. Tertiary Fallback: Piped Instances
   for (const base of PIPED_INSTANCES) {
     try {
       const res = await fetch(`${base}/streams/${encodeURIComponent(track.id)}`);
@@ -121,6 +270,7 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     } catch (_) {}
   }
 
+  // 6. Quaternary Fallback: Invidious Instances
   for (const base of INVIDIOUS_INSTANCES) {
     try {
       const res = await fetch(`${base}/api/v1/videos/${encodeURIComponent(track.id)}`);

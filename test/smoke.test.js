@@ -108,4 +108,21 @@ assert.deepEqual(
 );
 assert.deepEqual(lib.TRACK_SORT_MODES.slice(0, 3), ['manual', 'added-desc', 'added-asc']);
 
+// 5. Innertube synthetic track resolver parity assertions
+const innerTsCode = fs.readFileSync(path.join(ROOT, 'src/services/innertube.ts'), 'utf8');
+const innerTranspiled = ts.transpileModule(innerTsCode, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText;
+const innerMod = { exports: {} };
+new Function('exports', 'module', 'require', innerTranspiled)(innerMod.exports, innerMod, () => ({
+  searchSoundCloud: async () => [],
+  resolveSoundCloudStream: async () => null
+}));
+assert.equal(innerMod.exports.isSyntheticTrackId('sp_test_123'), true);
+assert.equal(innerMod.exports.isSyntheticTrackId('am_12345'), true);
+assert.equal(innerMod.exports.isSyntheticTrackId('ym_99999'), true);
+assert.equal(innerMod.exports.isSyntheticTrackId('ne_55555'), true);
+assert.equal(innerMod.exports.isSyntheticTrackId('abPmZCZZrFA'), false);
+assert.equal(innerMod.exports.isSyntheticTrackId('Y8JFxS1HlDo'), false);
+
 console.log('ALL RIFF-MURIEL UNIT & PARITY TESTS PASSED (0 errors)');

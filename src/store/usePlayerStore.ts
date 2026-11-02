@@ -274,8 +274,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
     });
 
+    const originalId = track.id;
     try {
       const uri = await resolveStreamUrl(track);
+      if (track.id !== originalId && get().currentTrack?.id === originalId) {
+        set({ currentTrack: { ...track } });
+        fetchSponsorSegments(track.id).then((segs) => {
+          if (get().currentTrack?.id === track.id) {
+            set({ skipSegments: segs });
+          }
+        });
+      }
       const baseVol = get().loudnessNormEnabled ? 0.88 : 1.0;
       const { sound } = await Audio.Sound.createAsync(
         { uri },
