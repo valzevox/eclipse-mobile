@@ -4563,7 +4563,7 @@ async function fetchAndApplyTranslation() {
     const curProv = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
     const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
     if (pill) {
-      const provLabels = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou', zingmp3: 'Zing MP3', genius: 'Genius' };
+      const provLabels = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
       pill.textContent = provLabels[curProv] || curProv.toUpperCase();
     }
   }
@@ -20344,8 +20344,8 @@ async function fetchAndApplyTranslation() {
   wireSettingDropdown('lyrics-source', 'muriel_lyrics_source', 'lrclib', reloadLyrics);
   wireSettingDropdown('word-source', 'muriel_word_source', 'auto', reloadLyrics);
 
-  const LYRICS_SOURCES = ['lrclib', 'synclrc', 'musixmatch', 'netease', 'kugou', 'zingmp3', 'genius'];
-  const LYRICS_SOURCE_NAMES = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou', zingmp3: 'Zing MP3', genius: 'Genius' };
+  const LYRICS_SOURCES = ['lrclib', 'synclrc', 'zingmp3', 'nhaccuatui', 'genius', 'musixmatch', 'netease', 'kugou'];
+  const LYRICS_SOURCE_NAMES = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
 
   const btnCycleSource = el.btnCycleLyricsSource || document.getElementById('btn-cycle-lyrics-source');
   if (btnCycleSource) {

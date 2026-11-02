@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 const https = require('https');
 const url = require('url');
 const fs = require('fs');
@@ -4183,6 +4183,143 @@ function fetchZingMp3Lyrics(title, artist) {
   });
 }
 
+function decryptNctRc4(hex, key) {
+  if (!hex || !key) return null;
+  let t = [];
+  for (let r = 0; r < key.length; r++) t.push(key.charCodeAt(r));
+  let r = new Array(256);
+  for (let a = 0; a < 256; a++) r[a] = a;
+  let n = 0, i = 0;
+  for (let a = 0; a < 256; a++) {
+    i = (t[n] & 255) + (r[a] & 255) + i & 255;
+    let o = r[a]; r[a] = r[i]; r[i] = o;
+    n = (n + 1) % t.length;
+  }
+  let bytes = [];
+  for (let idx = 0; idx < hex.length; idx += 2) {
+    bytes.push(parseInt(hex.substr(idx, 2), 16));
+  }
+  let a = new Array(bytes.length);
+  n = 0; i = 0;
+  for (let o = 0; o < bytes.length; o++) {
+    n = n + 1 & 255; i = (r[n] & 255) + i & 255;
+    let s = r[n]; r[n] = r[i]; r[i] = s;
+    let l = (r[n] & 255) + (r[i] & 255) & 255;
+    a[o] = bytes[o] ^ r[l];
+  }
+  return Buffer.from(a).toString('utf8');
+}
+
+async function fetchNhaccuatuiLyrics(title, artist) {
+  try {
+    const cleanTitle = (title || '')
+      .replace(/\|.*$/g, '')
+      .replace(/\s*-\s*Official.*$/i, '')
+      .replace(/\s*\(Official.*?\)/gi, '')
+      .replace(/\s*\[Official.*?\]/gi, '')
+      .replace(/\s*[\(\[](?:audio|mv|video|lyrics?|visualizer|album)[\)\]]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const cleanArtist = (artist || '')
+      .replace(/\s*-\s*Topic$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const query = `${cleanTitle} ${cleanArtist}`.trim() || cleanTitle;
+    if (!query) return null;
+
+    let songList = [];
+
+    try {
+      const nctVnUrl = `https://graph.nct.vn/api/v1/search/song?keyword=${encodeURIComponent(query)}&pageindex=1&pagesize=10&correct=true`;
+      const vnRes = await fetch(nctVnUrl, {
+        headers: {
+          'User-Agent': 'okhttp/4.12.0',
+          'Accept-Encoding': 'gzip',
+          'Content-Type': 'application/json',
+          'x-os': 'android'
+        }
+      });
+      if (vnRes && vnRes.ok) {
+        const vnJson = await vnRes.json().catch(() => null);
+        if (vnJson && vnJson.code === 0 && Array.isArray(vnJson.data?.songs)) {
+          songList = vnJson.data.songs;
+        }
+      }
+    } catch (_) {}
+
+    if (songList.length === 0) {
+      const searchUrl = `https://graph.nhaccuatui.com/api/v1/search/all?keyword=${encodeURIComponent(query)}`;
+      const sRes = await fetch(searchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Referer': 'https://www.nhaccuatui.com/'
+        }
+      }).catch(() => null);
+
+      if (sRes && sRes.ok) {
+        const sJson = await sRes.json().catch(() => null);
+        if (sJson && sJson.code === 0 && Array.isArray(sJson.data?.songs)) {
+          songList = sJson.data.songs;
+        }
+      }
+    }
+
+    if (songList.length === 0) {
+      const ajaxUrl = `https://www.nhaccuatui.com/ajax/search?q=${encodeURIComponent(query)}`;
+      const aRes = await fetch(ajaxUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.nhaccuatui.com/' }
+      }).catch(() => null);
+      if (aRes && aRes.ok) {
+        const aJson = await aRes.json().catch(() => null);
+        const aSongs = aJson?.data?.song || [];
+        for (const s of aSongs) {
+          if (s.url) {
+            const m = s.url.match(/\.([a-zA-Z0-9]+)\.html/);
+            if (m) songList.push({ key: m[1], name: s.name });
+          }
+        }
+      }
+    }
+
+    if (songList.length === 0) return null;
+
+    const normReqT = String(cleanTitle || title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+    for (const song of songList.slice(0, 5)) {
+      if (!song.key) continue;
+      const songName = String(song.name || song.title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      const songArtist = String(song.artists_names || song.artist || song.singer || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      if (!isStrictLyricMatch(title, artist, songName, songArtist)) {
+        continue;
+      }
+      const detailUrl = `https://graph.nhaccuatui.com/api/v1/song/lyric/detail?songKey=${encodeURIComponent(song.key)}`;
+      const dRes = await fetch(detailUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.nhaccuatui.com/' }
+      }).catch(() => null);
+      if (!dRes || !dRes.ok) continue;
+      const dJson = await dRes.json().catch(() => null);
+      if (dJson && dJson.code === 0 && dJson.data) {
+        const { timedLyric, keyDecryptLyric, content } = dJson.data;
+        if (timedLyric) {
+          const lrcRes = await fetch(timedLyric, { headers: { 'User-Agent': 'Mozilla/5.0' } }).catch(() => null);
+          if (lrcRes && lrcRes.ok) {
+            const hex = (await lrcRes.text().catch(() => '')).trim();
+            const decrypted = decryptNctRc4(hex, keyDecryptLyric || 'Lyr1cjust4nct');
+            if (decrypted && /\[\d{2}:\d{2}/.test(decrypted)) {
+              return { syncedLyrics: decrypted.trim(), plainLyrics: content || '' };
+            }
+          }
+        }
+        if (content && content.trim().length > 0) {
+          return { syncedLyrics: '', plainLyrics: content.trim() };
+        }
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
 // NetEase's word-timed lyrics for karaoke: [{ start, end, text, words: [{ text, start, end }] }] or null
 const NETEASE_HEADERS = { Referer: 'https://music.163.com/' };
 const wordsCache = new Map();
@@ -4394,6 +4531,10 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       const zm = await fetchZingMp3Lyrics(title, artist);
       rawLyrics = typeof zm === 'string' ? zm : (zm?.syncedLyrics || zm?.plainLyrics || '');
       successfulBackend = 'zingmp3';
+    } else if (normSource === 'nhaccuatui') {
+      const nct = await fetchNhaccuatuiLyrics(title, artist);
+      rawLyrics = nct ? (nct.syncedLyrics || nct.plainLyrics || '') : '';
+      successfulBackend = 'nhaccuatui';
     } else {
       // Primary: LRCLIB
       let plainFallback = '';
@@ -4468,6 +4609,19 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
             successfulBackend = 'zingmp3';
           } else if (zmText) {
             plainFallback = plainFallback || zmText;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback 5b: NhacCuaTui
+      if (!rawLyrics) {
+        try {
+          const nct = await fetchNhaccuatuiLyrics(title, artist);
+          if (nct?.syncedLyrics && /\[\d{2}:\d{2}/.test(nct.syncedLyrics)) {
+            rawLyrics = nct.syncedLyrics;
+            successfulBackend = 'nhaccuatui';
+          } else if (nct?.plainLyrics) {
+            plainFallback = plainFallback || nct.plainLyrics;
           }
         } catch (_) {}
       }
