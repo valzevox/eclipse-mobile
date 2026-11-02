@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Eclipse</string>
+    <string name="title_activity_main">Eclipse</string>
+    <string name="package_name">com.valzevox.eclipsemobile</string>
+    <string name="custom_url_scheme">eclipse</string>
+</resources>

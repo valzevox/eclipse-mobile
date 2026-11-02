@@ -1,0 +1,16 @@
+{
+  "appId": "com.valzevox.eclipsemobile",
+  "appName": "Eclipse",
+  "webDir": "www",
+  "backgroundColor": "#121214",
+  "ios": {
+    "contentInset": "never",
+    "scheme": "Eclipse",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

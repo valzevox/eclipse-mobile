@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -19,49 +21,55 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          java-version: '21'
+          cache: 'gradle'
 
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --no-audit --no-fund
 
-      - name: TypeScript Check
-        run: npm run typecheck
-
-      - name: Generate Android Native Project
+      - name: Stamp Build Info & Build Web Bundle
         run: |
-          npx expo prebuild --platform android --clean
-          node scripts/patch-android-build.js
-          echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
+          node mobile/build.mjs
+          node tools/build-info.mjs www/build-info.js android
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
 
       - name: Build Android Release APK
-        working-directory: android
-        run: ./gradlew assembleRelease -Pandroid.kotlinVersion=1.9.25 --no-daemon
+        env:
+          MURIEL_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          export MURIEL_VERSION_NAME="$(node -p "require('./package.json').version")"
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/eclipse-release.p12" -storetype PKCS12 -alias muriel -keyalg RSA -keysize 2048 -validity 10000 -storepass eclipse123 -keypass eclipse123 -dname "CN=Eclipse, OU=Mobile, O=Valzevox, L=HCMC, S=HCMC, C=VN"
+          export MURIEL_KEYSTORE="$RUNNER_TEMP/eclipse-release.p12"
+          export MURIEL_KEYSTORE_PASSWORD="eclipse123"
+          export MURIEL_KEY_PASSWORD="eclipse123"
+          export MURIEL_KEY_ALIAS="muriel"
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
 
       - name: Prepare APK Asset
         run: |
           mkdir -p build-artifacts
           TAG_VER="${GITHUB_REF_NAME}"
           if [ -z "$TAG_VER" ] || [ "$TAG_VER" = "main" ]; then
-            TAG_VER="v1.0.0"
+            TAG_VER="v$(node -p "require('./package.json').version")"
           fi
           APK_SRC=$(find android/app/build/outputs/apk/release -type f -name "*.apk" | head -n 1)
           echo "Found APK at: $APK_SRC"
           cp "$APK_SRC" "build-artifacts/Eclipse-${TAG_VER}.apk"
           ls -la build-artifacts/
 
-      - name: Create / Update GitHub Release
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           files: build-artifacts/*.apk
-          generate_release_notes: true
