@@ -138,7 +138,7 @@ public class MediaControlsPlugin extends Plugin {
         }
         // one left by an app that was stopped without cleaning up
         try { ctx.getSystemService(NotificationManager.class).cancel(ISLAND_ID); } catch (Exception ignored) {}
-        session = new MediaSessionCompat(ctx, "Muriel");
+        session = new MediaSessionCompat(ctx, "Eclipse");
         session.setCallback(new MediaSessionCompat.Callback() {
             @Override public void onPlay() { start("play"); }
             @Override public void onPause() { send("pause", -1); }
@@ -413,7 +413,7 @@ public class MediaControlsPlugin extends Plugin {
         Context app = getContext().getApplicationContext();
         try {
             if (wakeLock == null) {
-                wakeLock = app.getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Muriel:playback");
+                wakeLock = app.getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Eclipse:playback");
                 wakeLock.setReferenceCounted(false);
             }
             wakeLock.acquire(WAKE_LOCK_MS);
@@ -468,7 +468,7 @@ public class MediaControlsPlugin extends Plugin {
 
     private Notification buildNotification(Context ctx) {
         NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CHANNEL)
-                .setSmallIcon(R.drawable.ic_stat_muriel)
+                .setSmallIcon(R.drawable.ic_stat_eclipse)
                 .setContentTitle(title)
                 .setContentText(artist)
                 .setLargeIcon(artwork)
@@ -586,7 +586,7 @@ public class MediaControlsPlugin extends Plugin {
 
     private Notification buildIsland(Context ctx, Island s) {
         NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, ISLAND_CHANNEL)
-                .setSmallIcon(R.drawable.ic_stat_muriel)
+                .setSmallIcon(R.drawable.ic_stat_eclipse)
                 .setContentTitle(s.title)
                 .setContentText(s.artist)
                 .setLargeIcon(s.art)

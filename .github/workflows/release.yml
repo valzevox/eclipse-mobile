@@ -44,12 +44,18 @@ jobs:
 
       - name: Build Android Release APK
         env:
+          ECLIPSE_VERSION_CODE: ${{ github.run_number }}
           MURIEL_VERSION_CODE: ${{ github.run_number }}
         run: |
-          export MURIEL_VERSION_NAME="$(node -p "require('./package.json').version")"
+          export ECLIPSE_VERSION_NAME="$(node -p "require('./package.json').version")"
+          export MURIEL_VERSION_NAME="$ECLIPSE_VERSION_NAME"
+          export ECLIPSE_KEYSTORE="eclipse-release.jks"
           export MURIEL_KEYSTORE="eclipse-release.jks"
+          export ECLIPSE_KEYSTORE_PASSWORD="eclipse123"
           export MURIEL_KEYSTORE_PASSWORD="eclipse123"
+          export ECLIPSE_KEY_PASSWORD="eclipse123"
           export MURIEL_KEY_PASSWORD="eclipse123"
+          export ECLIPSE_KEY_ALIAS="eclipse"
           export MURIEL_KEY_ALIAS="eclipse"
           cd android
           chmod +x gradlew
