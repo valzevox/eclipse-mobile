@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Sparkles, Download, CheckCircle2, X, ArrowUpCircle } from 'lucide-react-native';
+import { MarkdownView } from './MarkdownView';
 import {
   UpdateInfo,
   checkForAppUpdate,
@@ -92,7 +93,7 @@ export function UpdateModal() {
 
             {updateInfo?.releaseNotes ? (
               <ScrollView style={styles.notesWrap} contentContainerStyle={{ paddingVertical: 8 }}>
-                <Text style={styles.notesText}>{updateInfo.releaseNotes}</Text>
+                <MarkdownView content={updateInfo.releaseNotes} accentColor={accentColor} />
               </ScrollView>
             ) : (
               <Text style={styles.emptyNotes}>Bug fixes and performance improvements are included.</Text>
@@ -155,7 +156,9 @@ export function UpdateModal() {
             </View>
 
             <ScrollView style={styles.notesWrap} contentContainerStyle={{ paddingVertical: 8 }}>
-              <Text style={styles.notesText}>{changelogBody}</Text>
+              {changelogBody ? (
+                <MarkdownView content={changelogBody} accentColor={accentColor} />
+              ) : null}
             </ScrollView>
 
             <TouchableOpacity
