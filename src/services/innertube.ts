@@ -259,12 +259,98 @@ export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmu
   return out;
 }
 
+const VOS_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
+
+let cachedVisitorId: string | null = null;
+let cachedVisitorAt = 0;
+
+async function getYouTubeVisitorId(): Promise<string | null> {
+  if (cachedVisitorId && Date.now() - cachedVisitorAt < 10 * 60 * 1000) {
+    return cachedVisitorId;
+  }
+  try {
+    const res = await fetch('https://www.youtube.com/', {
+      headers: { 'User-Agent': VOS_USER_AGENT, 'Accept-Language': 'en-US' }
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const match = html.match(/"VISITOR_DATA":"([^"]+)"/);
+      if (match && match[1]) {
+        cachedVisitorId = match[1];
+        cachedVisitorAt = Date.now();
+        return cachedVisitorId;
+      }
+    }
+  } catch (_) {}
+  return cachedVisitorId;
+}
+
 // -----------------------------------------------------------------------------
-// Direct Innertube Audio Stream Extraction (Riff-Muriel Promise.any iOS + ANDROID_VR)
+// Direct Innertube Audio Stream Extraction (Ported from Riff-Muriel mobile/extract.js)
+// Primary: VisionOS Audio HLS (itag 234 / 233, ~128-160kbps AAC, zero GVS 403 token block)
+// Fallback: iOS / ANDROID_VR direct adaptive format
 // -----------------------------------------------------------------------------
 export async function fetchDirectInnertubeAudio(videoId: string): Promise<string | null> {
   if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return null;
 
+  // Strategy 1 (Muriel Mobile): VisionOS HLS Audio Stream (Playable directly without googlevideo range 403 blocks)
+  try {
+    const visitor = await getYouTubeVisitorId();
+    const body: any = {
+      context: {
+        client: {
+          clientName: 'VISIONOS',
+          clientVersion: '1.02',
+          deviceMake: 'Apple',
+          deviceModel: 'RealityDevice17,1',
+          userAgent: VOS_USER_AGENT,
+          osName: 'visionOS',
+          osVersion: '26.5.23O471',
+          hl: 'en',
+          timeZone: 'UTC',
+          utcOffsetMinutes: 0
+        }
+      },
+      videoId,
+      contentCheckOk: true,
+      racyCheckOk: true
+    };
+    if (visitor) {
+      body.context.client.visitorData = visitor;
+    }
+    const headers: Record<string, string> = {
+      'User-Agent': VOS_USER_AGENT,
+      'Content-Type': 'application/json',
+      'X-Youtube-Client-Name': '101',
+      'X-Youtube-Client-Version': '1.02',
+      Origin: 'https://www.youtube.com'
+    };
+    if (visitor) {
+      headers['X-Goog-Visitor-Id'] = visitor;
+    }
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      const j = await res.json();
+      const master = j.streamingData?.hlsManifestUrl;
+      if (master) {
+        const m3uRes = await fetch(master, { headers: { 'User-Agent': VOS_USER_AGENT } });
+        if (m3uRes.ok) {
+          const m3u = await m3uRes.text();
+          const pick = (itag: number) =>
+            (m3u.match(new RegExp('#EXT-X-MEDIA:[^\\n]*URI="([^"]+/itag/' + itag + '/[^"]*)"')) || [])[1];
+          const rendition = pick(234) || pick(233);
+          if (rendition) return rendition;
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Strategy 2: Dual-client race (iOS + ANDROID_VR direct googlevideo format)
   const clients = [
     { context: IOS_CLIENT_CONTEXT, ua: IOS_USER_AGENT },
     { context: ANDROID_VR_CLIENT_CONTEXT, ua: ANDROID_VR_USER_AGENT }
