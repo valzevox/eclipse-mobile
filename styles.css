@@ -6758,6 +6758,27 @@ body.hidden-window *::after {
 .lyrics-header { justify-content: flex-end; }
 .lyrics-action-btn, #btn-close-custom-lyrics, #btn-cancel-sync { background-color: color-mix(in srgb, var(--md-sys-color-on-surface) 10%, transparent) !important; border: 0 !important; box-shadow: none !important; }
 .lyrics-action-btn:hover, #btn-close-custom-lyrics:hover, #btn-cancel-sync:hover { background-color: color-mix(in srgb, var(--md-sys-color-on-surface) 16%, transparent) !important; }
+.lyrics-action-btn.active {
+  background: var(--md-sys-color-primary, #60a5fa) !important;
+  color: var(--md-sys-color-on-primary, #000) !important;
+}
+.lyrics-action-btn.active svg {
+  stroke: var(--md-sys-color-on-primary, #000) !important;
+  fill: var(--md-sys-color-on-primary, #000) !important;
+}
+.right-panel .lyrics-action-btn#btn-cycle-lyrics-source,
+.right-panel.lyrics-empty .lyrics-action-btn#btn-cycle-lyrics-source {
+  width: auto !important;
+  min-width: 48px !important;
+  padding: 4px 10px !important;
+  border-radius: 9999px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+.right-panel .lyrics-action-btn#btn-cycle-lyrics-source span,
+.right-panel.lyrics-empty .lyrics-action-btn#btn-cycle-lyrics-source span {
+  display: inline-block !important;
+}
 
 .update-progress { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--md-sys-color-on-surface) 16%, transparent); overflow: hidden; margin: 12px 0; }
 .update-progress i { display: block; height: 100%; width: 0; background: var(--md-sys-color-primary); transition: width .2s ease; }

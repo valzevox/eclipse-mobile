@@ -1689,6 +1689,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                           lyricsStatus: document.getElementById('lyrics-status'),
                           lyricsContainer: document.getElementById('lyrics-container'),
                           lyricsHint: document.getElementById('lyrics-hint'),
+                          btnCycleLyricsSource: document.getElementById('btn-cycle-lyrics-source'),
+                          lyricsProviderPill: document.getElementById('lyrics-provider-pill'),
                           btnRomanizeLyrics: document.getElementById('btn-romanize-lyrics'),
                           btnTranslateLyrics: document.getElementById('btn-translate-lyrics'),
                           btnTrEnabled: document.getElementById('btn-tr-enabled'),
@@ -1747,6 +1749,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                           downloadPreviewFallback: document.getElementById('download-preview-fallback'),
                           downloadPreviewTitle: document.getElementById('download-preview-title'),
                           downloadPreviewArtist: document.getElementById('download-preview-artist'),
+                          btnPlaybarTrim: document.getElementById('btn-playbar-trim'),
                           btnPlaybarMore: document.getElementById('btn-playbar-more'),
 
                           audioSettingsModal: document.getElementById('audio-settings-modal'),
@@ -4556,6 +4559,12 @@ async function fetchAndApplyTranslation() {
       const hasCjk = state.syncedLyrics && state.syncedLyrics.some(l => /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(l.text));
       el.btnRomanizeLyrics.classList.toggle('hidden', !hasCjk);
       el.btnRomanizeLyrics.classList.toggle('active', !!state.romActive);
+    }
+    const curProv = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
+    const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
+    if (pill) {
+      const provLabels = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou', zingmp3: 'Zing MP3', genius: 'Genius' };
+      pill.textContent = provLabels[curProv] || curProv.toUpperCase();
     }
   }
 
@@ -8155,6 +8164,7 @@ async function fetchAndApplyTranslation() {
     if (track.artist && !/^unknown artist$/i.test(track.artist)) {
       items.push({ label: 'Go to artist', run: () => openTrackArtist(track) });
     }
+    items.push({ label: 'Trim best part', run: () => openTrimModalForTrack(track) });
     if (track.platform !== 'local') {
       items.push({ label: 'Download…', run: () => openDownloadModal(track) });
     }
@@ -15929,7 +15939,11 @@ async function fetchAndApplyTranslation() {
     elPath.textContent = '~/Downloads';
   }
 
-  function openDownloadModal(track) {
+  function openTrimModalForTrack(track) {
+    openDownloadModal(track, 'trim');
+  }
+
+  function openDownloadModal(track, initialTab = 'download') {
     if (!track || !el.downloadModal) return;
     trackToDownload = track;
     downloadBatch = null;
@@ -15980,6 +15994,7 @@ async function fetchAndApplyTranslation() {
       }
     }
 
+    showDownloadPane(initialTab || 'download');
     openModal(el.downloadModal);
   }
 
@@ -16065,6 +16080,16 @@ async function fetchAndApplyTranslation() {
     el.btnCancelDownload.addEventListener('click', () => {
       if (!cancelCurrentDownload()) {
         if (el.downloadModal) closeModal(el.downloadModal);
+      }
+    });
+  }
+
+  if (el.btnPlaybarTrim) {
+    el.btnPlaybarTrim.addEventListener('click', () => {
+      if (state.currentTrack) {
+        openTrimModalForTrack(state.currentTrack);
+      } else {
+        showToast(Tm('No track currently playing'), 'info');
       }
     });
   }
@@ -20318,6 +20343,33 @@ async function fetchAndApplyTranslation() {
   var reloadLyrics = () => { if (state.currentTrack) loadSyncedLyrics(state.currentTrack.title, state.currentTrack.artist, state.loadToken); };
   wireSettingDropdown('lyrics-source', 'muriel_lyrics_source', 'lrclib', reloadLyrics);
   wireSettingDropdown('word-source', 'muriel_word_source', 'auto', reloadLyrics);
+
+  const LYRICS_SOURCES = ['lrclib', 'synclrc', 'musixmatch', 'netease', 'kugou', 'zingmp3', 'genius'];
+  const LYRICS_SOURCE_NAMES = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou', zingmp3: 'Zing MP3', genius: 'Genius' };
+
+  const btnCycleSource = el.btnCycleLyricsSource || document.getElementById('btn-cycle-lyrics-source');
+  if (btnCycleSource) {
+    btnCycleSource.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cur = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
+      const idx = LYRICS_SOURCES.indexOf(cur);
+      const next = LYRICS_SOURCES[(idx + 1) % LYRICS_SOURCES.length];
+      localStorage.setItem('muriel_lyrics_source', next);
+      const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
+      if (pill) pill.textContent = LYRICS_SOURCE_NAMES[next] || next.toUpperCase();
+      const sourceLabel = document.getElementById('lyrics-source-label');
+      if (sourceLabel) sourceLabel.textContent = LYRICS_SOURCE_NAMES[next] || next;
+      const sourceMenu = document.getElementById('lyrics-source-menu');
+      if (sourceMenu) {
+        sourceMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o.dataset.value === next));
+      }
+      wordsSessionCache.clear();
+      showToast('Nguồn lời: ' + (LYRICS_SOURCE_NAMES[next] || next), 'info');
+      if (state.currentTrack) {
+        loadSyncedLyrics(state.currentTrack.title, state.currentTrack.artist, state.loadToken);
+      }
+    });
+  }
 
   // ---- stream timeout: a song that has loaded nothing for this long is given up on ----
   (function setupStreamTimeout() {
