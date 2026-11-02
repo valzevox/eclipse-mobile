@@ -65,3 +65,21 @@ jobs:
           name: ${{ github.ref_name }}
           files: build-artifacts/*.apk
           generate_release_notes: true
+
+      - name: Auto-generate detailed changelog if notes are empty
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"* %s (%h)")
+          else
+            COMMITS=$(git log -n 10 --pretty=format:"* %s (%h)")
+          fi
+          NOTES="### ✨ What's New in ${TAG}
+
+${COMMITS}
+
+**Full Diff**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+          gh release edit "${TAG}" --repo "${{ github.repository }}" --title "${TAG}" --notes "${NOTES}"
