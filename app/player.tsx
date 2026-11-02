@@ -26,6 +26,7 @@ import { downloadTrackOffline } from '../src/services/offlineCache';
 import { LyricsView } from '../src/components/LyricsView';
 import { AudioFxModal } from '../src/components/AudioFxModal';
 import { tr } from '../src/services/i18n';
+import { COVER_SHAPES, CoverShapeId, nextCoverShape } from '../src/services/shapes';
 
 function formatTime(sec: number): string {
   const s = Math.max(0, Math.floor(sec || 0));
@@ -65,6 +66,8 @@ export default function PlayerScreen() {
   const [showFx, setShowFx] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [mvUrl, setMvUrl] = useState<string | null>(null);
+  const [shapeId, setShapeId] = useState<CoverShapeId>('rounded');
+  const activeShape = COVER_SHAPES.find((s) => s.id === shapeId) || COVER_SHAPES[0];
 
   useEffect(() => {
     let mounted = true;
@@ -213,7 +216,27 @@ export default function PlayerScreen() {
             </ScrollView>
           ) : (
             <View style={styles.coverWrap}>
-              <Image source={{ uri: currentTrack.thumbnail }} style={styles.bigArt} />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setShapeId(nextCoverShape(shapeId).id)}
+                style={styles.coverArtBox}
+              >
+                <Image
+                  source={{ uri: currentTrack.thumbnail }}
+                  style={[
+                    styles.bigArt,
+                    {
+                      borderRadius: activeShape.borderRadius,
+                      borderTopLeftRadius: activeShape.borderTopLeftRadius ?? activeShape.borderRadius,
+                      borderTopRightRadius: activeShape.borderTopRightRadius ?? activeShape.borderRadius
+                    }
+                  ]}
+                />
+                {activeShape.showVinylHole && <View style={styles.vinylHole} />}
+                <View style={styles.shapeBadge}>
+                  <Text style={styles.shapeBadgeText}>{activeShape.label}</Text>
+                </View>
+              </TouchableOpacity>
               <View style={styles.trackMetaRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.bigTitle} numberOfLines={1}>
@@ -343,7 +366,26 @@ const styles = StyleSheet.create({
   },
   queueArt: { width: 46, height: 46, borderRadius: 10, backgroundColor: '#27272A' },
   coverWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 26 },
+  coverArtBox: { alignItems: 'center', justifyContent: 'center' },
   bigArt: { width: 290, height: 290, borderRadius: 28, backgroundColor: '#18181B' },
+  vinylHole: {
+    position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#09080F',
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.2)'
+  },
+  shapeBadge: {
+    position: 'absolute',
+    bottom: 12,
+    backgroundColor: 'rgba(9,8,15,0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 99
+  },
+  shapeBadgeText: { color: '#D4D4D8', fontSize: 11, fontWeight: '600' },
   trackMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
