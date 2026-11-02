@@ -2232,9 +2232,15 @@ body.no-page-glow .artist-hero { background: var(--md-sys-color-surface-containe
   transition: background-color var(--transition-m3), transform 0.15s ease !important;
 }
 
-.right-panel .lyrics-action-btn:not(#btn-romanize-lyrics) span,
-.right-panel.lyrics-empty .lyrics-action-btn span {
+.right-panel .lyrics-action-btn:not(#btn-romanize-lyrics):not(#btn-cycle-lyrics-source) span,
+.right-panel.lyrics-empty .lyrics-action-btn:not(#btn-romanize-lyrics):not(#btn-cycle-lyrics-source) span {
   display: none !important;
+}
+.right-panel .lyrics-action-btn#btn-romanize-lyrics span,
+.right-panel.lyrics-empty .lyrics-action-btn#btn-romanize-lyrics span {
+  display: inline-block !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
 }
 
 .right-panel .lyrics-action-btn svg,

@@ -4121,7 +4121,7 @@ function crossfadeOnTrackChange() {
     syncTvLayout(!!isEmpty);
   }
 
-  async function loadSyncedLyrics(title, artist, token) {
+  async function loadSyncedLyrics(title, artist, token, options) {
     if (el.lyricsContainer) {
       el.lyricsContainer.scrollTop = 0;
       el.lyricsContainer.style.transition = 'opacity 200ms cubic-bezier(0.2, 0, 0, 1)';
@@ -4161,6 +4161,9 @@ function crossfadeOnTrackChange() {
           el.lyricsContainer.style.opacity = '1';
         }
         setLyricsEmpty(true);
+        if (options && options.engineName) {
+          showToast('Không tìm thấy lời từ ' + options.engineName, 'info');
+        }
         return;
       }
 
@@ -4196,11 +4199,17 @@ function crossfadeOnTrackChange() {
           el.lyricsContainer.style.opacity = '1';
         }
         setLyricsEmpty(true);
+        if (options && options.engineName) {
+          showToast('Không tìm thấy lời từ ' + options.engineName, 'info');
+        }
         return;
       }
 
       state.syncedLyrics = parsed;
       window.dispatchEvent(new Event('muriel:lyrics'));
+      if (options && options.engineName) {
+        showToast('Đã tìm thấy lời từ ' + options.engineName, 'success');
+      }
       const hasSyncTimes = parsed.some(p => p.time >= 0);
       if (el.lyricsStatus) el.lyricsStatus.textContent = data.isCustom ? (hasSyncTimes ? 'Custom synced' : 'Custom') : (hasSyncTimes ? 'Synced' : 'Plain');
       if (state.trEnabled && state.trAuto) {
@@ -4234,6 +4243,9 @@ function crossfadeOnTrackChange() {
           el.lyricsContainer.style.opacity = '1';
         }
         setLyricsEmpty(true);
+        if (options && options.engineName) {
+          showToast('Không tìm thấy lời từ ' + options.engineName, 'info');
+        }
       }
     }
   }
@@ -4557,7 +4569,7 @@ async function fetchAndApplyTranslation() {
     }
     if (el.btnRomanizeLyrics) {
       const hasCjk = state.syncedLyrics && state.syncedLyrics.some(l => /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(l.text));
-      el.btnRomanizeLyrics.classList.toggle('hidden', !hasCjk);
+      el.btnRomanizeLyrics.classList.remove('hidden');
       el.btnRomanizeLyrics.classList.toggle('active', !!state.romActive);
     }
     const curProv = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
@@ -4938,6 +4950,15 @@ async function fetchAndApplyTranslation() {
 
   if (el.btnRomanizeLyrics) {
     el.btnRomanizeLyrics.addEventListener('click', () => {
+      if (!state.syncedLyrics || state.syncedLyrics.length === 0) {
+        showToast('Chưa có lời bài hát để phiên âm', 'info');
+        return;
+      }
+      const hasCjk = state.syncedLyrics.some(l => /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(l.text));
+      if (!hasCjk) {
+        showToast('Bài hát không có chữ Hán/Nhật/Hàn để phiên âm', 'info');
+        return;
+      }
       state.romActive = !state.romActive;
       updateLyricsTranslationUI();
       if (state.romActive) {
@@ -20364,9 +20385,10 @@ async function fetchAndApplyTranslation() {
         sourceMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o.dataset.value === next));
       }
       wordsSessionCache.clear();
-      showToast('Nguồn lời: ' + (LYRICS_SOURCE_NAMES[next] || next), 'info');
+      const engName = LYRICS_SOURCE_NAMES[next] || next;
+      showToast('Đang chuyển nguồn lời: ' + engName, 'info');
       if (state.currentTrack) {
-        loadSyncedLyrics(state.currentTrack.title, state.currentTrack.artist, state.loadToken);
+        loadSyncedLyrics(state.currentTrack.title, state.currentTrack.artist, state.loadToken, { engineName: engName });
       }
     });
   }
