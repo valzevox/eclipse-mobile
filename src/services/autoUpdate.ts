@@ -3,6 +3,7 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Linking from 'expo-linking';
+import * as IntentLauncher from 'expo-intent-launcher';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
@@ -174,11 +175,24 @@ export async function downloadAndInstallApk(
 
     onProgress(100);
 
-    // Mở Android Package Installer thông qua Content URI hoặc Intent
+    // Mở Android Package Installer thông qua Content URI với cờ cấp quyền đọc file
+    let opened = false;
     if (FileSystem.getContentUriAsync) {
-      const contentUri = await FileSystem.getContentUriAsync(result.uri);
-      await Linking.openURL(contentUri);
-    } else {
+      try {
+        const contentUri = await FileSystem.getContentUriAsync(result.uri);
+        // Dùng Intent ACTION_VIEW với MIME type application/vnd.android.package-archive và FLAG_GRANT_READ_URI_PERMISSION
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: 'application/vnd.android.package-archive',
+          flags: 1 // FLAG_GRANT_READ_URI_PERMISSION
+        });
+        opened = true;
+      } catch (intentErr) {
+        console.warn('IntentLauncher failed, trying Linking fallback:', intentErr);
+      }
+    }
+
+    if (!opened) {
       await Linking.openURL(result.uri);
     }
 

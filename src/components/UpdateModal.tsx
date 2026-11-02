@@ -55,6 +55,15 @@ export function UpdateModal() {
 
     if (res.success) {
       setIsInstalling(true);
+      // Tự động đóng modal sau 3 giây để người dùng hoàn tất cài đặt trong Package Installer
+      setTimeout(() => {
+        setShowUpdateModal(false);
+        setDownloadProgress(null);
+        setIsInstalling(false);
+      }, 3000);
+    } else {
+      setIsInstalling(false);
+      setDownloadProgress(null);
     }
   };
 
