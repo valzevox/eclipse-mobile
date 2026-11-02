@@ -220,7 +220,7 @@ if (Capacitor.getPlatform() === 'android') {
 {
   const { App } = require('@capacitor/app');
   const deliver = (url) => {
-    if (!url || !/^muriel:/i.test(url)) return;
+    if (!url || !/^(?:eclipse|muriel):/i.test(url)) return;
     const go = () => window.dispatchEvent(new CustomEvent('muriel:deeplink', { detail: url }));
     if (window.MurielSync) go(); else window.addEventListener('muriel:ready', () => setTimeout(go, 300), { once: true });
   };

@@ -651,9 +651,9 @@
     }
   }
 
-  // ---------- links from the QR code (muriel://link?code=…) ----------
+  // ---------- links from the QR code (eclipse://link?code=… or muriel://link?code=…) ----------
   function handleLink(url) {
-    const m = /^muriel:\/\/link\/?\?(?:.*&)?code=([0-9A-Za-z-]+)/.exec(String(url || ''));
+    const m = /^(?:eclipse|muriel):\/\/link\/?\?(?:.*&)?code=([0-9A-Za-z-]+)/.exec(String(url || ''));
     if (!m) return;
     if (window.showSettingsCategory) { const nav = document.getElementById('nav-settings'); if (nav) nav.click(); window.showSettingsCategory('sync'); }
     joinWithCode(m[1]);

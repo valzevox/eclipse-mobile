@@ -74,46 +74,22 @@
 
 // Riff 43 splash: Muriel's star draws itself while the app starts (computers only; phones show their own launch
 // screen). styles.css also fades it out on its own after a few seconds, so a startup error can't leave it up.
-(function murielSplash() {
+(function eclipseSplash() {
   const splash = document.getElementById('splash');
-  const host = document.getElementById('splash-logo');
-  if (!splash || !host) return;
+  if (!splash) return;
   const perf = /^(1|true)$/.test(localStorage.getItem('muriel_perf_mode') || '');
   const reduced = localStorage.getItem('muriel_adv_reduce_motion') === 'true' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   if (perf || reduced) { splash.remove(); return; }
   const finish = () => {
     if (!splash.isConnected || splash.classList.contains('hide')) return;
     splash.classList.add('hide');
-    setTimeout(() => splash.remove(), 480);
+    setTimeout(() => splash.remove(), 500);
   };
-  const safety = setTimeout(finish, 2150);
-  try {
-    const paths = Array.from(host.querySelectorAll('path'));
-    const lengths = paths.map((p) => {
-      const len = typeof p.getTotalLength === 'function' ? p.getTotalLength() : 2000;
-      Object.assign(p.style, { fillOpacity: '0', stroke: 'var(--md-sys-color-primary, #D0BCFF)', strokeWidth: '14px', strokeLinejoin: 'round', strokeDasharray: String(len), strokeDashoffset: String(len) });
-      return len;
-    });
-    const t0 = performance.now();
-    const ease = (t) => 1 - Math.pow(1 - t, 3);
-    const tick = (now) => {
-      const p = Math.min(1, (now - t0) / 1950);
-      const draw = ease(Math.min(1, p / 0.72));
-      const fill = p < 0.5 ? 0 : ease((p - 0.5) / 0.5);
-      host.style.transform = `scale(${(1.28 - 0.28 * ease(p)).toFixed(3)})`;
-      paths.forEach((el, i) => {
-        el.style.strokeDashoffset = (lengths[i] * (1 - draw)).toFixed(1);
-        el.style.fillOpacity = fill.toFixed(3);
-        el.style.strokeOpacity = (1 - fill * 0.65).toFixed(3);
-      });
-      if (p < 1) requestAnimationFrame(tick);
-      else { clearTimeout(safety); finish(); }
-    };
-    requestAnimationFrame(tick);
-  } catch (e) {
-    clearTimeout(safety);
-    finish();
-  }
+  // Give 2.8s for complete letter-by-letter reveal & scallop rotation
+  const safety = setTimeout(finish, 2800);
+  window.addEventListener('load', () => {
+    setTimeout(finish, 2400);
+  }, { once: true });
 })();
 
 document.addEventListener('DOMContentLoaded', async () => {
