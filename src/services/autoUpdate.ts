@@ -74,13 +74,15 @@ export async function checkForAppUpdate(): Promise<UpdateInfo | null> {
     const remoteVer = remoteTag.replace(/^v/i, '');
     const hasUpdate = isNewerVersion(remoteVer, currentVer);
 
-    // Ưu tiên file Eclipse.apk hoặc file *.apk bất kỳ
-    let downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Eclipse.apk`;
+    // Tự động tìm asset APK có gắn version (e.g. Eclipse-v1.0.3.apk hoặc *.apk)
+    let downloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Eclipse-${remoteTag}.apk`;
     if (Array.isArray(data.assets) && data.assets.length > 0) {
-      const eclipseApk = data.assets.find((a: any) => a.name === 'Eclipse.apk');
+      const versionedApk = data.assets.find(
+        (a: any) => typeof a.name === 'string' && a.name.endsWith('.apk') && a.name.includes(remoteTag)
+      );
       const anyApk = data.assets.find((a: any) => typeof a.name === 'string' && a.name.endsWith('.apk'));
-      if (eclipseApk && eclipseApk.browser_download_url) {
-        downloadUrl = eclipseApk.browser_download_url;
+      if (versionedApk && versionedApk.browser_download_url) {
+        downloadUrl = versionedApk.browser_download_url;
       } else if (anyApk && anyApk.browser_download_url) {
         downloadUrl = anyApk.browser_download_url;
       }

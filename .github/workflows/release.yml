@@ -56,7 +56,6 @@ jobs:
           fi
           APK_SRC=$(find android/app/build/outputs/apk/release -type f -name "*.apk" | head -n 1)
           echo "Found APK at: $APK_SRC"
-          cp "$APK_SRC" "build-artifacts/Eclipse.apk"
           cp "$APK_SRC" "build-artifacts/Eclipse-${TAG_VER}.apk"
           ls -la build-artifacts/
 
