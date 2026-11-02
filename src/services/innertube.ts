@@ -1,5 +1,5 @@
-// TypeScript / src/services/innertube.ts / Expo React Native / Direct Innertube iOS Stream Resolver & Zero-Latency Search
-// Architected after Riff-Muriel 43.0.0 fetchDirectYoutubeStreamServer
+// TypeScript / src/services/innertube.ts / Expo React Native / Direct Innertube iOS Stream Resolver & WEB_REMIX Zero-Latency Search
+// Architected after Riff-Muriel 43.0.0 fetchDirectYoutubeStreamServer & ytmSearchRequest
 
 import { searchSoundCloud, resolveSoundCloudStream } from './soundcloud';
 
@@ -32,21 +32,32 @@ const IOS_CLIENT_CONTEXT = {
 
 const IOS_USER_AGENT = 'com.google.ios.youtube/20.03.02 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X;)';
 
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://pipedapi.tokhmi.xyz',
-  'https://pipedapi.moomoo.me',
-  'https://api.piped.projectsegfau.lt'
-];
+const YTM_CLIENT_CONTEXT = {
+  client: {
+    clientName: 'WEB_REMIX',
+    clientVersion: '1.20250101.01.00',
+    hl: 'en',
+    gl: 'US'
+  }
+};
 
-const INVIDIOUS_INSTANCES = [
-  'https://inv.tux.pizza',
-  'https://invidious.nerdvpn.de',
-  'https://invidious.privacyredirect.com'
-];
+const WEB_CLIENT_CONTEXT = {
+  client: {
+    clientName: 'WEB',
+    clientVersion: '2.20250101.00.00',
+    hl: 'en',
+    gl: 'US'
+  }
+};
 
-// In-memory stream cache for zero-latency prefetch & instant re-play (3-hour TTL)
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+
+const YTM_SONGS_PARAMS = 'EgWKAQIIAWoMEA4QChADEAQQCRAF';
+
+// In-memory stream & search cache for zero-latency prefetch & instant re-play (3-hour TTL)
 const streamCache = new Map<string, { url: string; timestamp: number }>();
+const searchCache = new Map<string, { tracks: TrackItem[]; timestamp: number }>();
 const CACHE_TTL_MS = 3 * 60 * 60 * 1000;
 
 export function isSyntheticTrackId(id: string): boolean {
@@ -61,6 +72,87 @@ export function isSyntheticTrackId(id: string): boolean {
     id.includes('/') ||
     id.length !== 11
   );
+}
+
+function parseDurationText(text?: string): number {
+  if (!text || !/^\d+(:\d{1,2}){1,2}$/.test(text.trim())) return 0;
+  return text
+    .trim()
+    .split(':')
+    .map(Number)
+    .reduce((acc, n) => acc * 60 + n, 0);
+}
+
+export function parseYtmSongs(json: any, platform: 'ytmusic' | 'youtube' = 'ytmusic'): TrackItem[] {
+  const out: TrackItem[] = [];
+  const tabs = json?.contents?.tabbedSearchResultsRenderer?.tabs || [];
+  const sections = tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+  for (const section of sections) {
+    const items: any[] = [];
+    if (Array.isArray(section?.musicShelfRenderer?.contents)) {
+      items.push(...section.musicShelfRenderer.contents);
+    }
+    if (Array.isArray(section?.itemSectionRenderer?.contents)) {
+      items.push(...section.itemSectionRenderer.contents);
+    }
+    if (Array.isArray(section?.musicCardShelfRenderer?.contents)) {
+      items.push(...section.musicCardShelfRenderer.contents);
+    }
+    for (const wrap of items) {
+      const r = wrap?.musicResponsiveListItemRenderer;
+      if (!r) continue;
+      const cols = r.flexColumns || [];
+      const runsOf = (i: number) =>
+        cols[i]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+      const overlay =
+        r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer;
+      const videoId =
+        r.playlistItemData?.videoId ||
+        overlay?.playNavigationEndpoint?.watchEndpoint?.videoId;
+      if (!videoId || !/^[\w-]{11}$/.test(videoId)) continue;
+
+      const title = runsOf(0)
+        .map((x: any) => x.text)
+        .join('')
+        .trim();
+      const segments: string[] = [];
+      let cur: string[] = [];
+      for (const run of runsOf(1)) {
+        if (run.text === ' • ') {
+          segments.push(cur.join('').trim());
+          cur = [];
+        } else {
+          cur.push(run.text);
+        }
+      }
+      segments.push(cur.join('').trim());
+      const clean = segments.filter((s) => s && !/^(song|video)$/i.test(s));
+      let duration = 0;
+      if (clean.length && parseDurationText(clean[clean.length - 1])) {
+        duration = parseDurationText(clean.pop());
+      }
+      const artist = (clean[0] || 'Unknown Artist').replace(/\s*-\s*Topic$/i, '').trim();
+      const album = clean[1] || '';
+
+      const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+      let thumbnail = thumbs.length
+        ? thumbs[thumbs.length - 1].url
+        : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      thumbnail = thumbnail.replace(/=w\d+-h\d+[^&]*$/, '=w544-h544');
+
+      if (!title) continue;
+      out.push({
+        id: videoId,
+        title,
+        artist: artist || 'Unknown Artist',
+        album,
+        duration: duration || 200,
+        thumbnail,
+        platform
+      });
+    }
+  }
+  return out;
 }
 
 export async function fetchDirectInnertubeAudio(videoId: string): Promise<string | null> {
@@ -90,7 +182,6 @@ export async function fetchDirectInnertubeAudio(videoId: string): Promise<string
     );
     if (!audioFormats.length) return null;
 
-    // Mobile hardware acceleration prefers MP4 / M4A (AAC), fallback to WebM Opus
     const m4a = audioFormats.filter((f: any) => f.mimeType.includes('mp4') || f.mimeType.includes('m4a'));
     const pool = m4a.length > 0 ? m4a : audioFormats;
     pool.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
@@ -102,6 +193,28 @@ export async function fetchDirectInnertubeAudio(videoId: string): Promise<string
 
 export async function matchYouTubeVideoId(query: string): Promise<string | null> {
   if (!query || !query.trim()) return null;
+  try {
+    const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://music.youtube.com',
+        Referer: 'https://music.youtube.com/',
+        'User-Agent': DESKTOP_USER_AGENT
+      },
+      body: JSON.stringify({
+        context: YTM_CLIENT_CONTEXT,
+        query: query.trim(),
+        params: YTM_SONGS_PARAMS
+      })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const songs = parseYtmSongs(json, 'ytmusic');
+      if (songs.length > 0) return songs[0].id;
+    }
+  } catch (_) {}
+
   try {
     const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
       method: 'POST',
@@ -130,73 +243,98 @@ export async function searchTracks(
   platform: 'ytmusic' | 'youtube' | 'soundcloud' = 'ytmusic'
 ): Promise<TrackItem[]> {
   if (!query || !query.trim()) return [];
+  const cleanQ = query.trim();
+
   if (platform === 'soundcloud') {
-    const scResults = await searchSoundCloud(query);
+    const scResults = await searchSoundCloud(cleanQ);
     if (scResults.length > 0) return scResults;
   }
-  const q = encodeURIComponent(query.trim());
 
-  // 1. Try Piped API
-  const filter = platform === 'ytmusic' ? 'music_songs' : 'videos';
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetch(`${base}/search?q=${q}&filter=${filter}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && Array.isArray(data.items) && data.items.length > 0) {
-        return data.items
-          .filter((item: any) => item.url && item.title)
-          .slice(0, 25)
-          .map((item: any) => {
-            const vid = (item.url || '').replace('/watch?v=', '');
-            return {
-              id: vid,
-              title: item.title || 'Unknown Title',
-              artist: (item.uploaderName || 'Unknown Artist').replace(/\s*-\s*Topic$/i, ''),
-              duration: typeof item.duration === 'number' && item.duration > 0 ? item.duration : 210,
-              thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
-              platform
-            };
-          });
-      }
-    } catch (_) {}
+  const cacheKey = `${platform}:${cleanQ.toLowerCase()}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+    return cached.tracks;
   }
 
-  // 2. Try Invidious API
-  for (const base of INVIDIOUS_INSTANCES) {
-    try {
-      const res = await fetch(`${base}/api/v1/search?q=${q}&type=video`);
-      if (!res.ok) continue;
-      const items = await res.json();
-      if (Array.isArray(items) && items.length > 0) {
-        return items.slice(0, 25).map((item: any) => ({
-          id: item.videoId,
-          title: item.title || 'Unknown Title',
-          artist: (item.author || 'Unknown Artist').replace(/\s*-\s*Topic$/i, ''),
-          duration: item.lengthSeconds || 210,
-          thumbnail:
-            (item.videoThumbnails && item.videoThumbnails[0] && item.videoThumbnails[0].url) ||
-            `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
-          platform
-        }));
-      }
-    } catch (_) {}
-  }
-
-  // 3. Fallback: Direct Innertube Search Regex Resolver
+  // 1. Primary Fast Engine: YouTube Music WEB_REMIX Direct Innertube (~450ms, Riff-Muriel architecture)
   try {
-    const matchedVid = await matchYouTubeVideoId(query);
-    if (matchedVid) {
-      return [
-        {
-          id: matchedVid,
-          title: query.trim(),
-          artist: 'YouTube Music',
-          duration: 210,
-          thumbnail: `https://i.ytimg.com/vi/${matchedVid}/hqdefault.jpg`,
-          platform
+    const bodyPayload: any = {
+      context: YTM_CLIENT_CONTEXT,
+      query: cleanQ
+    };
+    if (platform === 'ytmusic') {
+      bodyPayload.params = YTM_SONGS_PARAMS;
+    }
+    const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://music.youtube.com',
+        Referer: 'https://music.youtube.com/',
+        'User-Agent': DESKTOP_USER_AGENT
+      },
+      body: JSON.stringify(bodyPayload)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const parsed = parseYtmSongs(json, platform === 'soundcloud' ? 'ytmusic' : platform);
+      if (parsed.length > 0) {
+        searchCache.set(cacheKey, { tracks: parsed, timestamp: Date.now() });
+        return parsed;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Secondary Fast Engine: Direct YouTube WEB Innertube Search (~550ms)
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': DESKTOP_USER_AGENT
+      },
+      body: JSON.stringify({
+        context: WEB_CLIENT_CONTEXT,
+        query: cleanQ
+      })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const contents =
+        json?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents ||
+        json?.contents?.sectionListRenderer?.contents ||
+        [];
+      const tracks: TrackItem[] = [];
+      for (const section of contents) {
+        const items = section?.itemSectionRenderer?.contents || [];
+        for (const item of items) {
+          if (tracks.length >= 25) break;
+          const v = item?.videoRenderer;
+          if (v && v.videoId) {
+            const vidId = v.videoId;
+            const title = v.title?.runs?.[0]?.text || 'Unknown Title';
+            const rawArtist = v.ownerText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || 'YouTube';
+            const artist = rawArtist.replace(/\s*-\s*Topic$/i, '').trim();
+            const durSec = parseDurationText(v.lengthText?.simpleText) || 200;
+            const thumbs = v.thumbnail?.thumbnails || [];
+            const thumbnail = thumbs.length
+              ? thumbs[thumbs.length - 1].url
+              : `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
+            tracks.push({
+              id: vidId,
+              title,
+              artist,
+              duration: durSec,
+              thumbnail,
+              platform: platform === 'soundcloud' ? 'youtube' : platform
+            });
+          }
         }
-      ];
+      }
+      if (tracks.length > 0) {
+        searchCache.set(cacheKey, { tracks, timestamp: Date.now() });
+        return tracks;
+      }
     }
   } catch (_) {}
 
@@ -211,7 +349,6 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
   }
   if (track.streamUrl && !track.streamUrl.includes('soundhelix')) return track.streamUrl;
 
-  // 1. If ID is synthetic (Spotify `sp_...`, Apple `am_...`, NetEase `ne_...`, Yandex `ym_...`), match real YouTube video
   if (isSyntheticTrackId(track.id)) {
     const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
     const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();
@@ -222,13 +359,11 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     }
   }
 
-  // 2. Memory cache check
   const cached = streamCache.get(track.id);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.url;
   }
 
-  // 3. Primary Engine: Direct YouTube Innertube iOS endpoint (Riff-Muriel 43.0.0 Architecture)
   if (/^[a-zA-Z0-9_-]{11}$/.test(track.id)) {
     const directUrl = await fetchDirectInnertubeAudio(track.id);
     if (directUrl) {
@@ -237,7 +372,6 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
     }
   }
 
-  // 4. Secondary fallback: If track.id failed or was wrong, retry matching once by query
   if (track.title && track.artist) {
     const cleanTitle = (track.title || '').replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '').trim();
     const cleanArtist = (track.artist || '').replace(/\s*-\s*Topic$/i, '').trim();
@@ -251,39 +385,6 @@ export async function resolveStreamUrl(track: TrackItem): Promise<string> {
         return directUrl;
       }
     }
-  }
-
-  // 5. Tertiary Fallback: Piped Instances
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetch(`${base}/streams/${encodeURIComponent(track.id)}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && Array.isArray(data.audioStreams) && data.audioStreams.length > 0) {
-        const sorted = [...data.audioStreams].sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-        const best = sorted.find((s) => s.mimeType?.includes('mp4') || s.mimeType?.includes('m4a')) || sorted[0];
-        if (best && best.url) {
-          streamCache.set(track.id, { url: best.url, timestamp: Date.now() });
-          return best.url;
-        }
-      }
-    } catch (_) {}
-  }
-
-  // 6. Quaternary Fallback: Invidious Instances
-  for (const base of INVIDIOUS_INSTANCES) {
-    try {
-      const res = await fetch(`${base}/api/v1/videos/${encodeURIComponent(track.id)}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && Array.isArray(data.adaptiveFormats)) {
-        const audios = data.adaptiveFormats.filter((f: any) => f.type && f.type.startsWith('audio/'));
-        if (audios.length > 0 && audios[0].url) {
-          streamCache.set(track.id, { url: audios[0].url, timestamp: Date.now() });
-          return audios[0].url;
-        }
-      }
-    } catch (_) {}
   }
 
   return 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
@@ -300,18 +401,33 @@ export async function prefetchNextTracks(tracks: TrackItem[]): Promise<void> {
 
 export async function resolveVideoStreamUrl(track: TrackItem): Promise<string | null> {
   if (!track || track.platform === 'soundcloud' || track.platform === 'local') return null;
-  for (const base of PIPED_INSTANCES) {
-    try {
-      const res = await fetch(`${base}/streams/${encodeURIComponent(track.id)}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && Array.isArray(data.videoStreams) && data.videoStreams.length > 0) {
-        const withAudio = data.videoStreams.filter((v: any) => !v.videoOnly && v.url);
-        if (withAudio.length > 0) return withAudio[0].url;
-      }
-    } catch (_) {}
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': IOS_USER_AGENT
+      },
+      body: JSON.stringify({
+        videoId: track.id,
+        context: IOS_CLIENT_CONTEXT,
+        contentCheckOk: true,
+        racyCheckOk: true
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const formats = [
+      ...((data.streamingData && data.streamingData.formats) || []),
+      ...((data.streamingData && data.streamingData.adaptiveFormats) || [])
+    ];
+    const video = formats.find(
+      (f: any) => f && f.url && typeof f.mimeType === 'string' && f.mimeType.startsWith('video/mp4')
+    );
+    return video?.url || null;
+  } catch (_) {
+    return null;
   }
-  return null;
 }
 
 const REGIONAL_CHARTS: Record<ChartRegion, TrackItem[]> = {

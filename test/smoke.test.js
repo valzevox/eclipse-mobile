@@ -26,6 +26,7 @@ const requiredPaths = [
   'src/services/libraryTools.ts',
   'src/services/shapes.ts',
   'src/services/autoUpdate.ts',
+  'src/components/IntroOverlay.tsx',
   'src/plugins/betterShuffle.ts'
 ];
 

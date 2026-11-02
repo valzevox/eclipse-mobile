@@ -1,8 +1,18 @@
-// TypeScript / app/(tabs)/search.tsx / Expo React Native / Multi-Source Search Screen with Genre Chips & Dynamic Accent
+// TypeScript / app/(tabs)/search.tsx / Expo React Native / Glassmorphic Multi-Source Search Screen with Instant WEB_REMIX Innertube
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Image, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  Image,
+  ActivityIndicator,
+  StyleSheet
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { Search as SearchIcon, Play, Sparkles, X } from 'lucide-react-native';
 import { searchTracks, TrackItem } from '../../src/services/innertube';
 import { usePlayerStore } from '../../src/store/usePlayerStore';
@@ -31,9 +41,12 @@ export default function SearchScreen() {
     const p = nextPlat || platform;
     if (!q.trim()) return;
     setLoading(true);
-    const items = await searchTracks(q, p);
-    setResults(items);
-    setLoading(false);
+    try {
+      const items = await searchTracks(q, p);
+      setResults(items);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSelectGenre = (genre: string) => {
@@ -52,37 +65,56 @@ export default function SearchScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>{tr(uiLang, 'search')}</Text>
 
-        <View style={styles.searchBox}>
-          <SearchIcon size={18} color="#A1A1AA" />
+        <View style={[styles.searchBox, { borderColor: `${accentColor}38` }]}>
+          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <SearchIcon size={18} color={accentColor} />
           <TextInput
             style={styles.input}
             placeholder={tr(uiLang, 'searchPlaceholder')}
-            placeholderTextColor="#71717A"
+            placeholderTextColor="#A1A1AA"
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={() => runSearch()}
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}>
-              <X size={18} color="#71717A" />
+            <TouchableOpacity
+              onPress={() => {
+                setQuery('');
+                setResults([]);
+              }}
+              style={styles.clearIconBtn}
+            >
+              <X size={18} color="#A1A1AA" />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[styles.goBtn, { backgroundColor: accentColor }]}
+            onPress={() => runSearch()}
+          >
+            <Text style={styles.goBtnText}>Go</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.chips}>
-          {platforms.map((p) => (
-            <TouchableOpacity
-              key={p.key}
-              onPress={() => {
-                setPlatform(p.key);
-                if (query.trim()) runSearch(query, p.key);
-              }}
-              style={[styles.chip, platform === p.key && { backgroundColor: accentColor }]}
-            >
-              <Text style={[styles.chipText, platform === p.key && styles.chipTextActive]}>{p.label}</Text>
-            </TouchableOpacity>
-          ))}
+          {platforms.map((p) => {
+            const active = platform === p.key;
+            return (
+              <TouchableOpacity
+                key={p.key}
+                onPress={() => {
+                  setPlatform(p.key);
+                  if (query.trim()) runSearch(query, p.key);
+                }}
+                style={[
+                  styles.chip,
+                  active && { backgroundColor: accentColor, borderColor: accentColor }
+                ]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {results.length === 0 && !loading && (
@@ -107,14 +139,21 @@ export default function SearchScreen() {
         )}
 
         {loading ? (
-          <ActivityIndicator size="large" color={accentColor} style={{ marginTop: 40 }} />
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={accentColor} />
+            <Text style={styles.loadingText}>Searching direct Innertube stream...</Text>
+          </View>
         ) : (
           <FlatList
             data={results}
             keyExtractor={(item, idx) => `${item.id}_${idx}`}
             contentContainerStyle={styles.list}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.row} onPress={() => playTrack(item, results)}>
+              <TouchableOpacity
+                style={styles.row}
+                activeOpacity={0.85}
+                onPress={() => playTrack(item, results)}
+              >
                 <Image source={{ uri: item.thumbnail }} style={styles.art} />
                 <View style={styles.meta}>
                   <Text style={styles.trackTitle} numberOfLines={1}>
@@ -124,7 +163,9 @@ export default function SearchScreen() {
                     {item.artist}
                   </Text>
                 </View>
-                <Play size={18} color={accentColor} />
+                <View style={[styles.playBadge, { backgroundColor: `${accentColor}22` }]}>
+                  <Play size={16} color={accentColor} fill={accentColor} />
+                </View>
               </TouchableOpacity>
             )}
           />
@@ -135,55 +176,76 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#09090B' },
+  safe: { flex: 1, backgroundColor: 'transparent' },
   container: { flex: 1, padding: 18 },
-  title: { color: '#FFF', fontSize: 26, fontWeight: '800', marginBottom: 14, letterSpacing: -0.5 },
+  title: { color: '#FFF', fontSize: 28, fontWeight: '800', marginBottom: 14, letterSpacing: -0.6 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181B',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    height: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 20,
+    paddingLeft: 14,
+    paddingRight: 6,
+    height: 52,
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)'
+    overflow: 'hidden'
   },
-  input: { flex: 1, color: '#FFF', fontSize: 15 },
-  chips: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  chip: {
+  input: { flex: 1, color: '#FFF', fontSize: 15, fontWeight: '500' },
+  clearIconBtn: { padding: 4 },
+  goBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 99,
-    backgroundColor: '#18181B'
+    borderRadius: 14
   },
-  chipText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: '#09090B', fontWeight: '700' },
+  goBtnText: { color: '#09090B', fontSize: 13, fontWeight: '800' },
+  chips: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  chip: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.10)'
+  },
+  chipText: { color: '#D4D4D8', fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#09090B', fontWeight: '800' },
   genresSection: { marginTop: 8 },
   genreHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   genreTitle: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   genreCard: {
-    backgroundColor: '#181820',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)'
+    borderColor: 'rgba(255, 255, 255, 0.10)'
   },
-  genreText: { color: '#E4E4E7', fontSize: 13, fontWeight: '600' },
-  list: { gap: 10, paddingBottom: 120 },
+  genreText: { color: '#F4F4F5', fontSize: 13, fontWeight: '600' },
+  loadingWrap: { alignItems: 'center', marginTop: 48, gap: 12 },
+  loadingText: { color: '#A1A1AA', fontSize: 13, fontWeight: '600' },
+  list: { gap: 10, paddingBottom: 140 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#141418',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     padding: 10,
-    borderRadius: 14,
-    gap: 12
+    borderRadius: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)'
   },
-  art: { width: 50, height: 50, borderRadius: 10, backgroundColor: '#27272A' },
+  art: { width: 52, height: 52, borderRadius: 12, backgroundColor: '#27272A' },
   meta: { flex: 1 },
-  trackTitle: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  trackArtist: { color: '#A1A1AA', fontSize: 12, marginTop: 2 }
+  trackTitle: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  trackArtist: { color: '#A1A1AA', fontSize: 12, marginTop: 2 },
+  playBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });
