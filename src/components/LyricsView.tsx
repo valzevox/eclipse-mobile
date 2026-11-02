@@ -5,6 +5,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 
 import { Search } from 'lucide-react-native';
 import { usePlayerStore } from '../store/usePlayerStore';
 import { fetchSyncedLyrics, enrichLyricsWithTranslationAndRomaji } from '../services/lyrics';
+import { isRtlText } from '../services/libraryTools';
 
 export function LyricsView() {
   const {
@@ -149,6 +150,7 @@ export function LyricsView() {
             const isActive = i === activeIndex;
             const distance = Math.abs(i - activeIndex);
             const opacity = isActive ? 1 : Math.max(0.22, 0.65 - distance * 0.12);
+            const rtl = isRtlText(line.text);
 
             return (
               <TouchableOpacity
@@ -171,7 +173,7 @@ export function LyricsView() {
                     })}
                   </Text>
                 ) : (
-                  <Text style={[styles.lineText, isActive && styles.activeLineText]}>{line.text}</Text>
+                  <Text style={[styles.lineText, isActive && styles.activeLineText, rtl && { textAlign: 'right', writingDirection: 'rtl' }]}>{line.text}</Text>
                 )}
 
                 {romanizeEnabled && line.romanized ? (

@@ -10,6 +10,8 @@ import { ImportedPlaylist } from '../services/playlistImport';
 import { ScrobblerConfig, sendNowPlayingStatus } from '../services/scrobbler';
 import { SkipSegment, fetchSponsorSegments } from '../services/sponsorblock';
 import { removeOfflineTrackFile, clearAllOfflineFiles } from '../services/offlineCache';
+import { pickNextShuffledTrack } from '../plugins/betterShuffle';
+import { dedupeTracks } from '../services/libraryTools';
 
 export type AudioPreset = 'normal' | 'nightcore' | 'slowed';
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -369,8 +371,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, currentTrack, shuffleEnabled } = get();
     if (!queue.length || !currentTrack) return;
     if (shuffleEnabled && queue.length > 1) {
-      const candidates = queue.filter((t) => t.id !== currentTrack.id);
-      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      const chosen = pickNextShuffledTrack(queue, currentTrack, get().favorites, 'smart');
       await get().playTrack(chosen);
       return;
     }
