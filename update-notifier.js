@@ -1,7 +1,7 @@
 // Eclipse Auto-Update Notifier & Markdown Changelog Viewer
 // Checks GitHub Releases (valzevox/eclipse-mobile) for newer semantic version vX.Y.Z
 (() => {
-  const build = window.MURIEL_BUILD || {};
+  const build = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {};
   const REPO = build.repo || 'valzevox/eclipse-mobile';
   const CURRENT_VER = String(build.version || '1.0.8').replace(/^v/i, '');
   const CHECK_EVERY = 30 * 60 * 1000;
