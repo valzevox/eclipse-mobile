@@ -389,4 +389,9 @@ test('featured artists match lyrics engines across lead and collaborator forms',
   const res = parse(await call('GET', '/api/lyrics?title=Pha%20L%C3%AA%20T%C3%ADm&artist=Eren%20ft.%20fishy&source=lrclib'));
   assert.equal(res.success, true);
   assert.equal(res.lyrics, '[00:10.00] test');
+
+  // Combined title test: "EREN, fishy - Pha lê tím"
+  const res2 = parse(await call('GET', '/api/lyrics?title=EREN%2C%20fishy%20-%20Pha%20l%C3%AA%20t%C3%ADm&artist=EREN%2C%20fishy&source=lrclib'));
+  assert.equal(res2.success, true);
+  assert.equal(res2.lyrics, '[00:10.00] test');
 });

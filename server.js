@@ -3644,7 +3644,7 @@ async function fetchLyricsDirect(title, artist, duration = 0) {
 const lyricsSources = require('./lyrics-sources');
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-function lyricsPageText(url, headers = {}, timeoutMs = 8000) {
+function lyricsPageText(url, headers = {}, timeoutMs = 2500) {
   return new Promise((resolve) => {
     const req = https.get(url, { headers: { 'User-Agent': BROWSER_UA, ...headers }, timeout: timeoutMs }, (res) => {
       let data = '';
@@ -3715,7 +3715,28 @@ async function fetchGeniusLyrics(title, artist) {
 }
 
 function sanitizeForLyrics(title, artist) {
-  let cleanTitle = (title || '')
+  let t = title || '';
+  let a = artist || '';
+  const DASH = /\s+[-–—|]\s+/;
+  const NOISE = /\b(official|video|audio|lyrics?|visuali[sz]er|hd|hq|4k|8k|remaster(ed)?|clip|mv|m\/v|explicit|clean|color\s*coded|live\s*performance|performance\s*video|full\s*album|tiny\s*desk)\b/i;
+
+  if (t.includes(' - ') || DASH.test(t)) {
+    const p = t.split(DASH);
+    if (p.length >= 2) {
+      const left = p[0].trim();
+      const right = p.slice(1).join(' - ').trim();
+      const cleanLeft = left.replace(/\s*[\(\[][^)]*[\)\]]/g, '').trim();
+      const cleanA = a.replace(/official|vevo|records|- topic/gi, '').replace(/\s*[\(\[][^)]*[\)\]]/g, '').trim();
+      if (!cleanA || cleanA.toLowerCase() === 'unknown artist' || cleanA.toLowerCase() === 'unknown' || cleanA.toLowerCase().includes(cleanLeft.toLowerCase()) || cleanLeft.toLowerCase().includes(cleanA.toLowerCase())) {
+        a = left;
+        t = right;
+      } else if (NOISE.test(right)) {
+        t = left;
+      }
+    }
+  }
+
+  let cleanTitle = (t || '')
     .replace(/\s*\|\s*.*$/i, '')
     .replace(/\[.*?\]|\(.*?\)/g, '')
     .replace(/official\s*(music)?\s*video|official\s*audio|lyrics|hd|4k|remastered|visualizer|clip\s*officiel|video\s*clip/gi, '')
@@ -3724,7 +3745,7 @@ function sanitizeForLyrics(title, artist) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  let cleanArtist = (artist || '')
+  let cleanArtist = (a || '')
     .replace(/\s*\|\s*.*$/i, '')
     .replace(/\[.*?\]|\(.*?\)/g, '')
     .replace(/- topic|vevo|records|official/gi, '')
@@ -3755,10 +3776,20 @@ function cleanLeadArtistForMatch(str) {
 function isStrictLyricMatch(reqTitle, reqArtist, candTitle, candArtist) {
   const t1 = normalizeLyricMeta(reqTitle);
   const t2 = normalizeLyricMeta(candTitle);
-  if (!t1 || !t2 || t1 !== t2) return false;
+  const DASH = /\s+[-–—|]\s+/;
+  let titleOk = (t1 && t2 && t1 === t2);
+  if (!titleOk && reqTitle && (reqTitle.includes(' - ') || DASH.test(reqTitle))) {
+    const p = reqTitle.split(DASH);
+    if (p.length >= 2) {
+      const strippedT = normalizeLyricMeta(p.slice(1).join(' - '));
+      if (strippedT && t2 && strippedT === t2) titleOk = true;
+    }
+  }
+  if (!titleOk) return false;
+
   const a1 = normalizeLyricMeta(reqArtist);
   const a2 = normalizeLyricMeta(candArtist);
-  if (!a1 || !a2) return false;
+  if (!a1 || !a2) return true; // If artist is missing on one side, title match suffices
   if (a1 === a2) return true;
   const parts1 = a1.split(/\s+/).filter(Boolean);
   const parts2 = a2.split(/\s+/).filter(Boolean);
@@ -4497,6 +4528,9 @@ function getFetchedLyricsPath(title, artist, source = '') {
 }
 
 async function handleLyrics(req, res, title, artist, allowOnline = true, duration = 0, source = '') {
+  const meta = sanitizeForLyrics(title, artist);
+  const cleanT = meta.cleanTitle || title;
+  const cleanA = meta.cleanArtist || artist;
   const normSource = source || '';
   const cacheKey = `${artist}:${title}:${normSource || 'default'}`;
   let cached = lyricsCache.get(cacheKey);
@@ -4571,40 +4605,40 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
     let successfulBackend = null;
 
     if (normSource === 'lrclib') {
-      const lrcText = await fetchLyricsDirect(title, artist, duration);
+      const lrcText = (await fetchLyricsDirect(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchLyricsDirect(title, artist, duration) : null);
       rawLyrics = lrcText || '';
       successfulBackend = 'lrclib';
     } else if (normSource === 'genius') {
-      rawLyrics = await fetchGeniusLyrics(title, artist);
+      rawLyrics = (await fetchGeniusLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchGeniusLyrics(title, artist) : null);
       successfulBackend = 'genius';
     } else if (normSource === 'synclrc') {
-      const sl = await fetchSyncLrc(title, artist, duration);
+      const sl = (await fetchSyncLrc(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchSyncLrc(title, artist, duration) : null);
       rawLyrics = sl ? (sl.syncedLyrics || sl.plainLyrics || '') : '';
       successfulBackend = 'synclrc';
     } else if (normSource === 'musixmatch') {
-      const mm = await fetchMusixmatchLyrics(title, artist);
+      const mm = (await fetchMusixmatchLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchMusixmatchLyrics(title, artist) : null);
       rawLyrics = mm ? (mm.syncedLyrics || mm.plainLyrics || '') : '';
       successfulBackend = 'musixmatch';
     } else if (normSource === 'kugou') {
-      const kg = await fetchKugouLyrics(title, artist, duration);
+      const kg = (await fetchKugouLyrics(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchKugouLyrics(title, artist, duration) : null);
       rawLyrics = kg ? (kg.syncedLyrics || kg.plainLyrics || '') : '';
       successfulBackend = 'kugou';
     } else if (normSource === 'netease') {
-      const ne = await fetchNeteaseLyrics(title, artist, duration);
+      const ne = (await fetchNeteaseLyrics(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchNeteaseLyrics(title, artist, duration) : null);
       rawLyrics = ne ? (ne.syncedLyrics || ne.plainLyrics || '') : '';
       successfulBackend = 'netease';
     } else if (normSource === 'zingmp3') {
-      const zm = await fetchZingMp3Lyrics(title, artist);
+      const zm = (await fetchZingMp3Lyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchZingMp3Lyrics(title, artist) : null);
       rawLyrics = typeof zm === 'string' ? zm : (zm?.syncedLyrics || zm?.plainLyrics || '');
       successfulBackend = 'zingmp3';
     } else if (normSource === 'nhaccuatui') {
-      const nct = await fetchNhaccuatuiLyrics(title, artist);
+      const nct = (await fetchNhaccuatuiLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchNhaccuatuiLyrics(title, artist) : null);
       rawLyrics = nct ? (nct.syncedLyrics || nct.plainLyrics || '') : '';
       successfulBackend = 'nhaccuatui';
     } else {
       // Primary: LRCLIB
       let plainFallback = '';
-      const lrcText = await fetchLyricsDirect(title, artist, duration);
+      const lrcText = (await fetchLyricsDirect(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchLyricsDirect(title, artist, duration) : null);
       if (lrcText && /\[\d{2}:\d{2}/.test(lrcText)) {
         rawLyrics = lrcText;
         successfulBackend = 'lrclib';
@@ -4615,7 +4649,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 1: SyncLRC
       if (!rawLyrics) {
         try {
-          const sl = await fetchSyncLrc(title, artist, duration);
+          const sl = (await fetchSyncLrc(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchSyncLrc(title, artist, duration) : null);
           const slText = sl ? (sl.syncedLyrics || sl.plainLyrics || '') : '';
           if (slText && /\[\d{2}:\d{2}/.test(slText)) {
             rawLyrics = slText;
@@ -4629,7 +4663,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 2: Musixmatch
       if (!rawLyrics) {
         try {
-          const mm = await fetchMusixmatchLyrics(title, artist);
+          const mm = (await fetchMusixmatchLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchMusixmatchLyrics(title, artist) : null);
           if (mm?.syncedLyrics && /\[\d{2}:\d{2}/.test(mm.syncedLyrics)) {
             rawLyrics = mm.syncedLyrics;
             successfulBackend = 'musixmatch';
@@ -4642,7 +4676,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 3: NetEase
       if (!rawLyrics) {
         try {
-          const ne = await fetchNeteaseLyrics(title, artist, duration);
+          const ne = (await fetchNeteaseLyrics(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchNeteaseLyrics(title, artist, duration) : null);
           if (ne?.syncedLyrics && /\[\d{2}:\d{2}/.test(ne.syncedLyrics)) {
             rawLyrics = ne.syncedLyrics;
             successfulBackend = 'netease';
@@ -4655,7 +4689,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 4: KuGou
       if (!rawLyrics) {
         try {
-          const kg = await fetchKugouLyrics(title, artist, duration);
+          const kg = (await fetchKugouLyrics(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchKugouLyrics(title, artist, duration) : null);
           if (kg?.syncedLyrics && /\[\d{2}:\d{2}/.test(kg.syncedLyrics)) {
             rawLyrics = kg.syncedLyrics;
             successfulBackend = 'kugou';
@@ -4668,7 +4702,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 5: Zing MP3
       if (!rawLyrics) {
         try {
-          const zm = await fetchZingMp3Lyrics(title, artist);
+          const zm = (await fetchZingMp3Lyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchZingMp3Lyrics(title, artist) : null);
           const zmText = typeof zm === 'string' ? zm : (zm?.syncedLyrics || zm?.plainLyrics || '');
           if (zmText && /\[\d{2}:\d{2}/.test(zmText)) {
             rawLyrics = zmText;
@@ -4682,7 +4716,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
       // Fallback 5b: NhacCuaTui
       if (!rawLyrics) {
         try {
-          const nct = await fetchNhaccuatuiLyrics(title, artist);
+          const nct = (await fetchNhaccuatuiLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchNhaccuatuiLyrics(title, artist) : null);
           if (nct?.syncedLyrics && /\[\d{2}:\d{2}/.test(nct.syncedLyrics)) {
             rawLyrics = nct.syncedLyrics;
             successfulBackend = 'nhaccuatui';
@@ -4698,7 +4732,7 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
           rawLyrics = plainFallback;
         } else {
           try {
-            const gn = await fetchGeniusLyrics(title, artist);
+            const gn = (await fetchGeniusLyrics(cleanT, cleanA)) || (cleanT !== title ? await fetchGeniusLyrics(title, artist) : null);
             if (gn) {
               rawLyrics = gn;
               successfulBackend = 'genius';
