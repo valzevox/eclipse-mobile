@@ -64,6 +64,16 @@
           leftIsArtist = false;
         } else if (/topic|vevo|records|music/i.test(artist || '')) {
           leftIsArtist = true;
+        } else if (NOISE.test(right) || /^\d{4}$/.test(right.trim())) {
+          leftIsArtist = false;
+        } else if (NOISE.test(left)) {
+          leftIsArtist = true;
+        } else if (leftHasFeat || leftHasSplit) {
+          leftIsArtist = true;
+        } else if (rightHasFeat || rightHasSplit) {
+          leftIsArtist = false;
+        } else if (/youtube|soundcloud/i.test(channel)) {
+          leftIsArtist = true;
         }
       } else {
         if (rightHasFeat || rightHasSplit) {
