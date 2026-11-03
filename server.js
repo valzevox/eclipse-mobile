@@ -4608,7 +4608,18 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
     let rawLyrics = null;
     let successfulBackend = null;
 
-    if (normSource === 'lrclib') {
+    if (normSource === 'custom') {
+      if (fs.existsSync(customPath)) {
+        try {
+          const customLyrics = await fs.promises.readFile(customPath, 'utf-8');
+          if (lyricsCache.get(cacheKey) === inFlightEntry) {
+            lyricsCache.set(cacheKey, { text: customLyrics, isCustom: true });
+          }
+          return sendLyrics(customLyrics, true);
+        } catch (e) {}
+      }
+      return sendLyrics(null);
+    } else if (normSource === 'lrclib') {
       let lrcText = (await fetchLyricsDirect(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchLyricsDirect(title, artist, duration) : null);
       if (!lrcText && normSource === 'lrclib') {
         // Fallback to SyncLRC if LRCLIB server is busy (503) or not found
@@ -4795,9 +4806,13 @@ async function handleSaveCustomLyrics(req, res, title, artist) {
       const customPath = getCustomLyricsPath(title, artist);
       await fs.promises.writeFile(customPath, lyrics, 'utf-8');
 
-      const cacheKey = `${artist}:${title}`;
-      lyricsCache.delete(cacheKey);
-      lyricsCache.delete(`${cacheKey}:genius`);
+      const customPrefix = String(artist || "") + ":" + String(title || "") + ":";
+      const customDirect = String(artist || "") + ":" + String(title || "");
+      for (const k of Array.from(lyricsCache.keys())) {
+        if (k === customDirect || k.startsWith(customPrefix)) {
+          lyricsCache.delete(k);
+        }
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));

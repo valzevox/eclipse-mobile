@@ -421,6 +421,7 @@ html.is-mobile #right-panel .lyrics-header:empty, html.is-mobile #right-panel .l
 html.is-mobile #right-panel.lyrics-empty .right-panel-header-actions { display: flex !important; }
 html.is-mobile #right-panel.lyrics-empty .np-tools-moved { display: flex !important; }
 html.is-mobile #right-panel.lyrics-empty #btn-cycle-lyrics-source { display: inline-flex !important; opacity: 1 !important; pointer-events: auto !important; }
+html.is-mobile #right-panel.lyrics-empty #btn-sync-lyrics { display: none !important; }
 html.is-mobile #right-panel.lyrics-empty #btn-add-custom-lyrics { display: inline-flex !important; opacity: 1 !important; pointer-events: auto !important; }
 
 /* like button in Now Playing */

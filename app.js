@@ -4098,6 +4098,14 @@ function crossfadeOnTrackChange() {
   function setLyricsEmpty(isEmpty) {
     const panel = el.rightPanel || document.getElementById('right-panel');
     if (!panel) return;
+
+    if (el.btnSyncLyrics) {
+      el.btnSyncLyrics.classList.toggle('hidden', !!isEmpty);
+    }
+    if (el.btnAddCustomLyrics) {
+      el.btnAddCustomLyrics.classList.remove('hidden');
+    }
+
     const currentlyEmpty = panel.classList.contains('lyrics-empty');
     if (currentlyEmpty === !!isEmpty) {
       syncTvLayout();
@@ -4567,7 +4575,7 @@ async function fetchAndApplyTranslation() {
     const curProv = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
     const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
     if (pill) {
-      const provLabels = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
+      const provLabels = { custom: 'Custom', lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
       pill.textContent = provLabels[curProv] || curProv.toUpperCase();
     }
   }
@@ -6007,6 +6015,15 @@ async function fetchAndApplyTranslation() {
 
       showToast(text ? Tm('Lyrics saved successfully') : Tm('Lyrics removed'), 'info');
       closeCustomLyricsEditor();
+      localStorage.setItem('muriel_lyrics_source', 'custom');
+      const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
+      if (pill) pill.textContent = 'Custom';
+      const sourceLabel = document.getElementById('lyrics-source-label');
+      if (sourceLabel) sourceLabel.textContent = 'Custom';
+      const sourceMenu = document.getElementById('lyrics-source-menu');
+      if (sourceMenu) {
+        sourceMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o.dataset.value === 'custom'));
+      }
       if (isCurrentSong({ title, artist })) loadSyncedLyrics(title, artist, state.loadToken);
     } catch (e) {
       showToast(Tm('Failed to save lyrics: {0}', e.message), 'error');
@@ -6159,6 +6176,15 @@ async function fetchAndApplyTranslation() {
 
       showToast(Tm('Synced lyrics saved'), 'info');
       closeSyncMode();
+      localStorage.setItem('muriel_lyrics_source', 'custom');
+      const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
+      if (pill) pill.textContent = 'Custom';
+      const sourceLabel = document.getElementById('lyrics-source-label');
+      if (sourceLabel) sourceLabel.textContent = 'Custom';
+      const sourceMenu = document.getElementById('lyrics-source-menu');
+      if (sourceMenu) {
+        sourceMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o.dataset.value === 'custom'));
+      }
       if (isCurrentSong({ title, artist })) loadSyncedLyrics(title, artist, state.loadToken);
     } catch (e) {
       showToast(Tm('Failed to save synced lyrics: {0}', e.message), 'error');
@@ -20357,8 +20383,8 @@ async function fetchAndApplyTranslation() {
   wireSettingDropdown('lyrics-source', 'muriel_lyrics_source', 'lrclib', reloadLyrics);
   wireSettingDropdown('word-source', 'muriel_word_source', 'auto', reloadLyrics);
 
-  const LYRICS_SOURCES = ['lrclib', 'synclrc', 'zingmp3', 'nhaccuatui', 'genius', 'musixmatch', 'netease', 'kugou'];
-  const LYRICS_SOURCE_NAMES = { lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
+  const LYRICS_SOURCES = ['custom', 'lrclib', 'synclrc', 'zingmp3', 'nhaccuatui', 'genius', 'musixmatch', 'netease', 'kugou'];
+  const LYRICS_SOURCE_NAMES = { custom: 'Custom', lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
 
   const btnCycleSource = el.btnCycleLyricsSource || document.getElementById('btn-cycle-lyrics-source');
   if (btnCycleSource) {

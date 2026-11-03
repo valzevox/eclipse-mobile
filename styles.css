@@ -2236,6 +2236,16 @@ body.no-page-glow .artist-hero { background: var(--md-sys-color-surface-containe
 .right-panel.lyrics-empty .lyrics-action-btn:not(#btn-romanize-lyrics):not(#btn-cycle-lyrics-source) span {
   display: none !important;
 }
+
+.right-panel.lyrics-empty #btn-sync-lyrics {
+  display: none !important;
+}
+
+.right-panel.lyrics-empty #btn-add-custom-lyrics {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
 .right-panel .lyrics-action-btn#btn-romanize-lyrics span,
 .right-panel.lyrics-empty .lyrics-action-btn#btn-romanize-lyrics span {
   display: inline-block !important;
