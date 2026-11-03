@@ -3,7 +3,7 @@
 
 (function () {
   const NOISE = /\b(official|video|audio|lyrics?|visuali[sz]er|hd|hq|4k|8k|remaster(ed)?|clip|mv|m\/v|explicit|clean|color\s*coded|live\s*performance|performance\s*video|full\s*album|tiny\s*desk)\b/i;
-  const FEAT = /\b(feat\.?|ft\.?|featuring|with|prod\.?|produced\s+by)\s/i;
+  const FEAT = /\b(feat\.?|ft\.?|featuring|with|cùng\s*với|prod\.?|produced\s+by)\b/i;
   const BRACKETS = /\s*[([{【「『](.*?)[)\]}】」』]/g;
   const DASH = /\s+[-–—|]\s+/;
 
@@ -34,9 +34,8 @@
       .replace(/\s+/g, ' ')
       .trim();
   }
-
   function splitArtists(s) {
-    return String(s || '').split(/\s*(?:,|&|\+|;|\/|×|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/i).map((a) => a.trim()).filter(Boolean);
+    return String(s || '').split(/\s*(?:,|&|\+|;|\/|×|\bx\b|\band\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\bcùng\s*với\b)\s*/i).map((a) => a.trim()).filter(Boolean);
   }
 
   const uniq = (list) => {
@@ -51,13 +50,42 @@
     const parts = song.split(DASH);
     if (parts.length >= 2) {
       const left = parts[0], right = parts.slice(1).join(' - ');
-      const ch = norm(channel), l = norm(left);
-      const leftIsArtist = !ch || (l && (l.includes(norm(splitArtists(channel)[0] || channel)) || ch.includes(norm(splitArtists(left)[0] || left)))) || /topic|vevo|records|music/i.test(artist || '');
-      if (leftIsArtist) { fromTitle = cleanArtist(left); song = right; } else if (NOISE.test(right)) song = left; // "Song - Remastered 2011"
+      const ch = norm(channel), l = norm(left), r = norm(right);
+      const leftHasFeat = FEAT.test(left);
+      const rightHasFeat = FEAT.test(right);
+      const leftHasSplit = splitArtists(left).length > 1;
+      const rightHasSplit = splitArtists(right).length > 1;
+      let leftIsArtist = false;
+      if (ch) {
+        const firstCh = norm(splitArtists(channel)[0] || channel);
+        if (l && (l.includes(firstCh) || firstCh.includes(norm(splitArtists(left)[0] || left)))) {
+          leftIsArtist = true;
+        } else if (r && (r.includes(firstCh) || firstCh.includes(norm(splitArtists(right)[0] || right)))) {
+          leftIsArtist = false;
+        } else if (/topic|vevo|records|music/i.test(artist || '')) {
+          leftIsArtist = true;
+        }
+      } else {
+        if (rightHasFeat || rightHasSplit) {
+          leftIsArtist = false;
+        } else if (leftHasFeat || leftHasSplit) {
+          leftIsArtist = true;
+        } else {
+          leftIsArtist = true;
+        }
+      }
+      if (leftIsArtist) {
+        fromTitle = cleanArtist(left);
+        song = right;
+      } else if (NOISE.test(right)) {
+        song = left;
+      } else {
+        fromTitle = cleanArtist(right);
+        song = left;
+      }
     }
     const titles = uniq([cleanTitle(song), cleanTitle(song, true)]);
     const lead = fromTitle || channel;
-    // channel names often drop the spaces ("TheWeeknd"); lrclib lists "The Weeknd"
     const spaced = (n) => (n && !/\s/.test(n) ? n.replace(/([a-z])([A-Z])/g, '$1 $2') : '');
     const artists = uniq([lead, splitArtists(lead)[0], channel, splitArtists(channel)[0], spaced(lead), spaced(channel)].filter(Boolean));
     return { titles, artists };
@@ -74,8 +102,13 @@
   // lrclib search results -> the best one for this song, or null when nothing really matches
   function pickBest(list, want, duration) {
     if (!Array.isArray(list)) return null;
+    let pool = list;
+    if (typeof duration === 'number' && duration > 10) {
+      const closeCandidates = list.filter(item => typeof item.duration === 'number' && Math.abs(item.duration - duration) <= 18);
+      if (closeCandidates.length > 0) pool = closeCandidates;
+    }
     let best = null, bestScore = 0;
-    for (const item of list) {
+    for (const item of pool) {
       if (!item || (!item.syncedLyrics && !item.plainLyrics) || item.instrumental) continue;
       const t = Math.max(...want.titles.map((w) => overlap(w, item.trackName || item.name)));
       const a = Math.max(0, ...want.artists.map((w) => overlap(w, item.artistName)));
