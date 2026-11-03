@@ -378,3 +378,15 @@ test('word timings come from NetEase for the matching song', async () => {
   assert.equal(none.success, false);
   assert.deepEqual(none.lines, []);
 });
+
+test('featured artists match lyrics engines across lead and collaborator forms', async () => {
+  outbound = (req, res, target) => {
+    if (target.includes('lrclib.net')) {
+      return json(res, [{ trackName: 'Pha Lê Tím', artistName: 'EREN', syncedLyrics: '[00:10.00] test' }]);
+    }
+    return json(res, []);
+  };
+  const res = parse(await call('GET', '/api/lyrics?title=Pha%20L%C3%AA%20T%C3%ADm&artist=Eren%20ft.%20fishy&source=lrclib'));
+  assert.equal(res.success, true);
+  assert.equal(res.lyrics, '[00:10.00] test');
+});

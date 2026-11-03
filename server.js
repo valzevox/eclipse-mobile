@@ -3698,7 +3698,10 @@ async function fetchGeniusLyrics(title, artist) {
   try {
     const cleanLeadArtist = a0.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
     const qStr = encodeURIComponent(`${t0} ${cleanLeadArtist}`.trim());
-    const fallbackRes = await lrclibJson(`/api/search?q=${qStr}`);
+    let fallbackRes = await lrclibJson(`/api/search?q=${qStr}`);
+    if (!Array.isArray(fallbackRes) || !fallbackRes.length) {
+      fallbackRes = await lrclibJson(`/api/search?track_name=${encodeURIComponent(t0)}&artist_name=${encodeURIComponent(cleanLeadArtist)}`);
+    }
     if (Array.isArray(fallbackRes)) {
       const match = fallbackRes.find(item => item && (item.plainLyrics || item.syncedLyrics));
       if (match) {
@@ -3740,6 +3743,15 @@ function normalizeLyricMeta(str) {
     .trim();
 }
 
+function cleanLeadArtistForMatch(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/\s*[\(\[][^)]*[\)\]]/gi, ' ')
+    .replace(/\b(?:ft\.?|feat\.?|featuring|with|cùng với)\b.*$/gi, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
 function isStrictLyricMatch(reqTitle, reqArtist, candTitle, candArtist) {
   const t1 = normalizeLyricMeta(reqTitle);
   const t2 = normalizeLyricMeta(candTitle);
@@ -3750,7 +3762,12 @@ function isStrictLyricMatch(reqTitle, reqArtist, candTitle, candArtist) {
   if (a1 === a2) return true;
   const parts1 = a1.split(/\s+/).filter(Boolean);
   const parts2 = a2.split(/\s+/).filter(Boolean);
-  return parts1.length > 0 && parts1.join(' ') === parts2.join(' ');
+  if (parts1.length > 0 && parts1.join(' ') === parts2.join(' ')) return true;
+  const lead1 = cleanLeadArtistForMatch(reqArtist);
+  const lead2 = cleanLeadArtistForMatch(candArtist);
+  if (lead1 && lead2 && (lead1 === lead2 || lead1.includes(lead2) || lead2.includes(lead1))) return true;
+  if (parts1.length > 0 && parts2.length > 0 && parts1[0] === parts2[0]) return true;
+  return false;
 }
 
 let musixmatchToken = null;
@@ -3782,8 +3799,9 @@ async function fetchMusixmatchLyrics(title, artist) {
     const token = await getMusixmatchToken();
     const cleanTitle = (title || '').replace(/\s*[\(\[][^\)\]]*(?:feat|ft|remix|official|audio)[^\)\]]*[\)\]]/gi, '').trim();
     const cleanArtist = (artist || '').replace(/ - Topic|VEVO/gi, '').trim();
+    const leadArtist = cleanArtist.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
     const qTrack = encodeURIComponent(cleanTitle || title);
-    const qArtist = encodeURIComponent(cleanArtist || artist);
+    const qArtist = encodeURIComponent(leadArtist || cleanArtist || artist);
     const tokParam = token ? `&usertoken=${encodeURIComponent(token)}` : '';
 
     const macroUrl = `https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get?app_id=web-desktop-app-v1.0${tokParam}&q_track=${qTrack}&q_artist=${qArtist}`;
@@ -3947,7 +3965,9 @@ function parseKaraokeToWords(karaokeStr) {
 async function fetchKugouLyrics(title, artist, durationSec = 0) {
   try {
     const durMs = Math.round((durationSec || 0) * 1000);
-    const searchUrl = `http://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${encodeURIComponent(artist + ' - ' + title)}&duration=${durMs}&hash=`;
+    const cleanLead = (artist || '').replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
+    const searchKeyword = cleanLead ? `${cleanLead} - ${title}` : `${artist} - ${title}`;
+    const searchUrl = `http://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=${encodeURIComponent(searchKeyword)}&duration=${durMs}&hash=`;
     const res = await fetch(searchUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
     });
@@ -4099,9 +4119,11 @@ function fetchZingMp3Lyrics(title, artist) {
         .replace(/\s*-\s*Topic$/i, '')
         .replace(/\s+/g, ' ')
         .trim();
+      const leadArtist = cleanArtist.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
 
       const candidates = [];
-      if (cleanTitle && cleanArtist) candidates.push(`${cleanTitle} ${cleanArtist}`.trim());
+      if (cleanTitle && leadArtist) candidates.push(`${cleanTitle} ${leadArtist}`.trim());
+      if (cleanTitle && cleanArtist && cleanArtist !== leadArtist) candidates.push(`${cleanTitle} ${cleanArtist}`.trim());
       if (cleanTitle) candidates.push(cleanTitle);
 
       let foundSongId = null;
@@ -4262,8 +4284,9 @@ async function fetchNhaccuatuiLyrics(title, artist) {
       .replace(/\s*-\s*Topic$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
+    const leadArtist = cleanArtist.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
 
-    const query = `${cleanTitle} ${cleanArtist}`.trim() || cleanTitle;
+    const query = `${cleanTitle} ${leadArtist || cleanArtist}`.trim() || cleanTitle;
     if (!query) return null;
 
     let songList = [];
@@ -4468,13 +4491,14 @@ function getCustomLyricsPath(title, artist) {
   return path.join(CUSTOM_LYRICS_DIR, lyricsKey(title, artist) + '.lrc');
 }
 
-function getFetchedLyricsPath(title, artist, source = 'lrclib') {
-  return path.join(LYRICS_DIR, lyricsKey(title, artist) + (source === 'genius' ? '_genius' : `_${source}`) + '.lrc');
+function getFetchedLyricsPath(title, artist, source = '') {
+  const s = source || 'default';
+  return path.join(LYRICS_DIR, lyricsKey(title, artist) + (s === 'genius' ? '_genius' : (s === 'lrclib' || s === 'default' ? '_lrclib' : `_${s}`)) + '.lrc');
 }
 
-async function handleLyrics(req, res, title, artist, allowOnline = true, duration = 0, source = 'lrclib') {
-  const normSource = source || 'lrclib';
-  const cacheKey = `${artist}:${title}:${normSource}`;
+async function handleLyrics(req, res, title, artist, allowOnline = true, duration = 0, source = '') {
+  const normSource = source || '';
+  const cacheKey = `${artist}:${title}:${normSource || 'default'}`;
   let cached = lyricsCache.get(cacheKey);
   if (cached && cached.expires && Date.now() > cached.expires) {
     lyricsCache.delete(cacheKey);
@@ -4546,7 +4570,11 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
     let rawLyrics = null;
     let successfulBackend = null;
 
-    if (normSource === 'genius') {
+    if (normSource === 'lrclib') {
+      const lrcText = await fetchLyricsDirect(title, artist, duration);
+      rawLyrics = lrcText || '';
+      successfulBackend = 'lrclib';
+    } else if (normSource === 'genius') {
       rawLyrics = await fetchGeniusLyrics(title, artist);
       successfulBackend = 'genius';
     } else if (normSource === 'synclrc') {
@@ -7783,7 +7811,7 @@ const server = http.createServer(guardHandler(async (req, res) => {
     const artist = parsedUrl.query.artist || '';
     const allowOnline = parsedUrl.query.online !== '0';
     const duration = Number(parsedUrl.query.duration) || 0;
-    const source = parsedUrl.query.source || 'lrclib';
+    const source = parsedUrl.query.source || '';
     return handleLyrics(req, res, title, artist, allowOnline, duration, source);
   }
 
