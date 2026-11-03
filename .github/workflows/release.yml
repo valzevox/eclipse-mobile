@@ -67,8 +67,23 @@ jobs:
           cp "$APK_SRC" "build-artifacts/Eclipse-${TAG_VER}.apk"
           ls -la build-artifacts/
 
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          echo "Previous tag: $PREV_TAG"
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log "$PREV_TAG..HEAD" --pretty=format:"* %s" --reverse)
+          else
+            NOTES=$(git log -n 10 --pretty=format:"* %s" --reverse)
+          fi
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
+          body: ${{ steps.release_notes.outputs.NOTES }}
           files: build-artifacts/*.apk

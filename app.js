@@ -208,41 +208,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     'Playlists', 'Favorites', 'In playlists', 'Queue', 'History', 'Library', 'Online', 'Discover', 'View', 'Audio', 'Your stats',
     'Repeat: playlist', 'Repeat: this song', 'Start radio', 'Radio · {0}', 'Radio · {0} and {1} more', 'Sleep timer: {0} min', 'Sleep timer: end of track']);
 
-  const toastQueue = [];
-  const MAX_QUEUED_TOASTS = 10;
-  let isToastActive = false;
+  const MAX_ACTIVE_TOASTS = 3;
 
   // message: a string as it is (it is not translated: it may hold a song title), or Tm('...', ...) to translate
   function showToast(message, type = 'info', duration = null) {
     if (!message) return;
-    if (toastQueue.length >= MAX_QUEUED_TOASTS) {
-      toastQueue.shift();
-    }
-    toastQueue.push({ message, type, duration });
-    if (!isToastActive) {
-      // a message in another language waits a moment for its words, instead of showing up in English
-      if (message && message.i18n && I18N.lang !== 'en') {
-        isToastActive = true;
-        I18N.ready(message.i18n).then(processToastQueue);
-      } else {
-        processToastQueue();
-      }
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    if (message && message.i18n && I18N.lang !== 'en') {
+      I18N.ready(message.i18n).then(() => renderToastItem(message, type, duration));
+    } else {
+      renderToastItem(message, type, duration);
     }
   }
 
-  function processToastQueue() {
-    if (toastQueue.length === 0) {
-      isToastActive = false;
-      return;
-    }
-    isToastActive = true;
+  function renderToastItem(message, type = 'info', duration = null) {
     const container = document.getElementById('toast-container');
-    if (!container) {
-      toastQueue.length = 0;
-      isToastActive = false;
-      return;
+    if (!container) return;
+
+    // Prune excessive toasts if already at cap
+    const activeToasts = Array.from(container.querySelectorAll('.muriel-toast:not(.leaving)'));
+    if (activeToasts.length >= MAX_ACTIVE_TOASTS) {
+      const oldest = activeToasts[0];
+      if (oldest && typeof oldest._dismissToast === 'function') {
+        oldest._dismissToast();
+      }
     }
-    const { message, type, duration } = toastQueue.shift();
 
     const toast = document.createElement('div');
     toast.className = `muriel-toast ${type}${duration ? ' wide' : ''}`;
@@ -264,11 +256,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
     if (message && message.i18n) I18N.text(toast.querySelector('.toast-text'), message);
 
+    // Prepend or append to stack container
     container.appendChild(toast);
 
     let dismissed = false;
     let timer = null;
-    let remaining = duration || 3500;
+    let remaining = duration || 2200;
     let startTimestamp = Date.now();
 
     const dismiss = () => {
@@ -281,11 +274,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (done) return;
         done = true;
         toast.remove();
-        processToastQueue();
       };
       toast.addEventListener('animationend', finish, { once: true });
-      setTimeout(finish, 320);
+      setTimeout(finish, 220);
     };
+
+    toast._dismissToast = dismiss;
 
     const startTimer = (dur) => {
       startTimestamp = Date.now();
@@ -295,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     toast.addEventListener('mouseenter', () => {
       if (timer) clearTimeout(timer);
       remaining -= (Date.now() - startTimestamp);
-      if (remaining < 500) remaining = 500;
+      if (remaining < 400) remaining = 400;
     });
 
     toast.addEventListener('mouseleave', () => {

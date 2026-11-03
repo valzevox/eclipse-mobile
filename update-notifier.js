@@ -28,7 +28,7 @@
   }
 
   function renderMarkdown(md) {
-    if (!md) return '<p>Performance improvements and bug fixes.</p>';
+    if (!md) return '<p>See full release details on GitHub Release page.</p>';
     const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const inline = (s) => esc(s)
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -67,6 +67,43 @@
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function fetchReleaseChangelog(tag, prevTag) {
+    try {
+      // 1. Check if release notes exist on the specific tag
+      const relRes = await fetch('https://api.github.com/repos/' + REPO + '/releases/tags/' + tag, {
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      if (relRes.ok) {
+        const relData = await relRes.json();
+        if (relData.body && relData.body.trim().length > 0) {
+          return relData.body.trim();
+        }
+      }
+    } catch (e) {}
+
+    // 2. If release notes are empty, fetch commit compare diff from GitHub API
+    try {
+      const compareUrl = prevTag
+        ? 'https://api.github.com/repos/' + REPO + '/compare/' + prevTag + '...' + tag
+        : 'https://api.github.com/repos/' + REPO + '/commits?sha=' + tag + '&per_page=10';
+      const compRes = await fetch(compareUrl, { headers: { Accept: 'application/vnd.github+json' } });
+      if (compRes.ok) {
+        const compData = await compRes.json();
+        const commits = Array.isArray(compData.commits) ? compData.commits : (Array.isArray(compData) ? compData : []);
+        if (commits.length > 0) {
+          const lines = commits.map(c => {
+            const msg = (c.commit && c.commit.message ? c.commit.message : '').split('\n')[0].trim();
+            return msg ? '- ' + msg : '';
+          }).filter(Boolean);
+          if (lines.length > 0) {
+            return '### Changes in ' + tag + '\n' + lines.join('\n');
+          }
+        }
+      }
+    } catch (e) {}
+    return '';
   }
 
   function describe(rel) {
@@ -242,11 +279,23 @@
   const lastSeenVer = store.get('eclipse_last_seen_version');
   if (lastSeenVer && isNewerVer(CURRENT_VER, lastSeenVer)) {
     store.set('eclipse_last_seen_version', CURRENT_VER);
-    fetchLatestRelease().then((rel) => {
-      if (rel && (rel.tag_name || '').replace(/^v/i, '') === CURRENT_VER) {
-        showUpdateModal({ tag: rel.tag_name, version: CURRENT_VER, notes: rel.body || '', page: rel.html_url }, true);
-      }
-    }).catch(() => {});
+    const prevTag = 'v' + lastSeenVer;
+    const currentTag = 'v' + CURRENT_VER;
+    fetchReleaseChangelog(currentTag, prevTag).then((changelog) => {
+      showUpdateModal({
+        tag: currentTag,
+        version: CURRENT_VER,
+        notes: changelog || '',
+        page: 'https://github.com/' + REPO + '/releases/tag/' + currentTag
+      }, true);
+    }).catch(() => {
+      showUpdateModal({
+        tag: currentTag,
+        version: CURRENT_VER,
+        notes: '',
+        page: 'https://github.com/' + REPO + '/releases/tag/' + currentTag
+      }, true);
+    });
   } else if (!lastSeenVer) {
     store.set('eclipse_last_seen_version', CURRENT_VER);
   }
