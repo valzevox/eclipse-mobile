@@ -8816,13 +8816,212 @@ html.ui-rtl input::placeholder { direction: rtl; text-align: right; }
 .setting-hint { font-size: calc(12px * var(--font-scale, 1)); color: var(--md-sys-color-outline); line-height: 1.35; font-weight: 400; }
 .eclipse-beta-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); line-height: 1.2; }
 
-/* splash: Muriel's star draws itself, then the app fades in (app.js; desktop only, skipped in performance mode) */
-#splash { position: fixed; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; z-index: 999999; transition: opacity .45s cubic-bezier(0.2, 0, 0, 1); }
-#splash.hide { opacity: 0; pointer-events: none; }
-#splash-logo { width: 26vmin; height: 26vmin; will-change: transform; }
-#splash-logo svg { width: 100%; height: 100%; overflow: visible; display: block; }
-body.perf #splash { transition: none !important; }
-body.perf #splash-logo { will-change: auto !important; }
+/* Eclipse Brand Intro Animation Overlay (Mobile & Desktop) */
+#splash {
+  position: fixed !important;
+  inset: 0 !important;
+  background: radial-gradient(circle at 50% 45%, #181424 0%, #0d0a14 55%, #050408 100%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  z-index: 999999 !important;
+  transition: opacity 0.5s cubic-bezier(0.2, 0, 0, 1), transform 0.5s cubic-bezier(0.2, 0, 0, 1) !important;
+  animation: splashGiveUp 0.5s 2.9s forwards !important;
+  contain: strict;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+#splash.hide {
+  opacity: 0 !important;
+  transform: scale(1.08) !important;
+  pointer-events: none !important;
+}
+@keyframes splashGiveUp {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+.eclipse-intro-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.eclipse-intro-orb-top {
+  position: absolute;
+  top: -10vw;
+  left: -15vw;
+  width: 90vw;
+  height: 90vw;
+  max-width: 440px;
+  max-height: 440px;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--md-sys-color-primary, #D0BCFF) 0%, rgba(208, 188, 255, 0) 70%);
+  filter: blur(65px);
+  opacity: 0.35;
+  animation: eclipseOrbPulseA 4.5s ease-in-out infinite alternate;
+}
+.eclipse-intro-orb-bottom {
+  position: absolute;
+  bottom: -12vw;
+  right: -15vw;
+  width: 95vw;
+  height: 95vw;
+  max-width: 420px;
+  max-height: 420px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #7C3AED 0%, rgba(124, 58, 237, 0) 70%);
+  filter: blur(70px);
+  opacity: 0.28;
+  animation: eclipseOrbPulseB 5.5s ease-in-out infinite alternate;
+}
+@keyframes eclipseOrbPulseA {
+  0% { transform: scale(0.92) translate3d(0, 0, 0); opacity: 0.28; }
+  100% { transform: scale(1.12) translate3d(12px, 14px, 0); opacity: 0.42; }
+}
+@keyframes eclipseOrbPulseB {
+  0% { transform: scale(1.08) translate3d(0, 0, 0); opacity: 0.32; }
+  100% { transform: scale(0.88) translate3d(-14px, -10px, 0); opacity: 0.22; }
+}
+.eclipse-intro-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  will-change: transform;
+}
+.eclipse-intro-hero {
+  position: relative;
+  width: clamp(170px, 46vmin, 204px);
+  height: clamp(170px, 46vmin, 204px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  animation: eclipseHeroPop 0.72s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.eclipse-intro-halo {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--md-sys-color-primary, #D0BCFF) 22%, transparent) 0%, transparent 72%);
+  pointer-events: none;
+  animation: eclipseHaloPulse 2.8s ease-in-out infinite alternate;
+}
+.eclipse-intro-scallop {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  fill: var(--md-sys-color-primary, #D0BCFF);
+  fill-opacity: 0.24;
+  filter: drop-shadow(0 0 20px color-mix(in srgb, var(--md-sys-color-primary, #D0BCFF) 40%, transparent));
+  animation: eclipseSpin 28s linear infinite;
+  will-change: transform;
+}
+.eclipse-intro-logo-wrap {
+  width: clamp(94px, 25vmin, 114px) !important;
+  height: clamp(94px, 25vmin, 114px) !important;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 1;
+}
+.eclipse-intro-logo-wrap svg {
+  width: 100% !important;
+  height: 100% !important;
+  fill: #FFFFFF !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+.eclipse-intro-word {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(38px, 10.5vmin, 50px);
+  font-weight: 800;
+  letter-spacing: -1.6px;
+  color: #FFFFFF;
+  line-height: 1.05;
+  margin-top: 4px;
+}
+.eclipse-intro-word span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(28px) scale(1.22);
+  animation: eclipseLetterIn 0.46s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.eclipse-intro-word span:nth-child(1) { animation-delay: 0.18s; }
+.eclipse-intro-word span:nth-child(2) { animation-delay: 0.25s; }
+.eclipse-intro-word span:nth-child(3) { animation-delay: 0.32s; }
+.eclipse-intro-word span:nth-child(4) { animation-delay: 0.39s; }
+.eclipse-intro-word span:nth-child(5) { animation-delay: 0.46s; }
+.eclipse-intro-word span:nth-child(6) { animation-delay: 0.53s; }
+.eclipse-intro-word span:nth-child(7) { animation-delay: 0.60s; }
+.eclipse-intro-pill {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary, #D0BCFF) 32%, transparent);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  color: #F4F4F5;
+  font-size: clamp(11px, 3.2vmin, 13px);
+  font-weight: 600;
+  letter-spacing: 0.35px;
+  opacity: 0;
+  animation: eclipsePillFade 0.48s 0.76s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.eclipse-intro-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary, #D0BCFF);
+  box-shadow: 0 0 10px var(--md-sys-color-primary, #D0BCFF);
+  animation: eclipseDotPulse 1.8s ease-in-out infinite alternate;
+}
+@keyframes eclipseSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes eclipseHaloPulse {
+  0% { transform: scale(0.96); opacity: 0.5; }
+  100% { transform: scale(1.08); opacity: 0.95; }
+}
+@keyframes eclipseHeroPop {
+  0% { opacity: 0; transform: scale(1.28); filter: blur(10px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+@keyframes eclipseLetterIn {
+  0% { opacity: 0; transform: translateY(28px) scale(1.22); filter: blur(6px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes eclipsePillFade {
+  0% { opacity: 0; transform: translateY(10px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes eclipseDotPulse {
+  0% { transform: scale(0.85); box-shadow: 0 0 4px var(--md-sys-color-primary, #D0BCFF); }
+  100% { transform: scale(1.25); box-shadow: 0 0 12px var(--md-sys-color-primary, #D0BCFF); }
+}
+body.perf #splash,
+html.force-reduced-motion #splash {
+  display: none !important;
+}
 
 /* hidden titlebar: slides down over the app when the pointer touches the top edge */
 #titlebar-reveal-zone { display: none; position: fixed; top: 0; left: 0; right: 0; height: 6px; z-index: 10001; -webkit-app-region: no-drag; }
