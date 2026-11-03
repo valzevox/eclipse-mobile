@@ -3709,6 +3709,10 @@ async function fetchGeniusLyrics(title, artist) {
         if (lyr && lyr.trim().length > 20) return lyr.trim();
       }
     }
+    // Also try SyncLRC plain lyrics when LRCLIB is busy/503
+    const sl = await fetchSyncLrc(t0, cleanLeadArtist || a0);
+    const slText = sl ? (sl.plainLyrics || (sl.syncedLyrics ? sl.syncedLyrics.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim() : '')) : '';
+    if (slText && slText.trim().length > 20) return slText.trim();
   } catch (_) {}
 
   return null;
@@ -3906,7 +3910,7 @@ function fetchSyncLrc(title, artist, duration = 0) {
 
       const req = https.get(url, {
         headers: { 'User-Agent': 'EclipseMusic/1.0 (SyncLRC)' },
-        timeout: 6000
+        timeout: 2500
       }, (res) => {
         let d = '';
         const dec = new StringDecoder('utf8');
@@ -4605,7 +4609,14 @@ async function handleLyrics(req, res, title, artist, allowOnline = true, duratio
     let successfulBackend = null;
 
     if (normSource === 'lrclib') {
-      const lrcText = (await fetchLyricsDirect(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchLyricsDirect(title, artist, duration) : null);
+      let lrcText = (await fetchLyricsDirect(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchLyricsDirect(title, artist, duration) : null);
+      if (!lrcText && normSource === 'lrclib') {
+        // Fallback to SyncLRC if LRCLIB server is busy (503) or not found
+        try {
+          const sl = (await fetchSyncLrc(cleanT, cleanA, duration)) || (cleanT !== title ? await fetchSyncLrc(title, artist, duration) : null);
+          lrcText = sl ? (sl.syncedLyrics || sl.plainLyrics || '') : '';
+        } catch (_) {}
+      }
       rawLyrics = lrcText || '';
       successfulBackend = 'lrclib';
     } else if (normSource === 'genius') {
