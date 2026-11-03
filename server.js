@@ -3623,10 +3623,13 @@ async function fetchLyricsDirect(title, artist, duration = 0) {
     if (hit && hit.plainLyrics && !plain) plain = hit.plainLyrics;
   }
   const primary = want.artists.find((a) => !/[,&]/.test(a)) || a0 || '';
-  const searches = await Promise.all([
-    lrclibJson(`/api/search?${q({ track_name: t0, artist_name: primary })}`),
-    lrclibJson(`/api/search?${q({ q: `${primary} ${t0}`.trim() })}`),
-  ]);
+  const cleanLead = primary.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
+  const searchQueries = [
+    lrclibJson(`/api/search?${q({ track_name: t0, artist_name: cleanLead || primary })}`),
+    lrclibJson(`/api/search?${q({ q: `${t0} ${cleanLead || primary}`.trim() })}`),
+    lrclibJson(`/api/search?${q({ q: `${primary} ${t0}`.trim() })}`)
+  ];
+  const searches = await Promise.all(searchQueries);
   // last resort: the title alone; pickBest still wants the artist or the length to match
   if (!plain && !searches.some((list) => pickBest(list, want, dur))) searches.push(await lrclibJson(`/api/search?${q({ track_name: t0 })}`));
   for (const list of searches) {
@@ -3656,22 +3659,57 @@ function lyricsPageText(url, headers = {}, timeoutMs = 8000) {
 }
 const lyricsPageJson = async (url, headers) => { const t = await lyricsPageText(url, headers); try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
 
+const GENIUS_CLIENT_TOKEN = '0DjpZAu_YhgKvA-rH-Owsvyc8OqAUG247u-LaQTHK7ZEvrARq_2S2Tn3Aszff_4q';
+
 // the song's page on Genius, found by its cleaned-up title and artist; only a real title match counts
 async function fetchGeniusLyrics(title, artist) {
   const want = parseForLyrics(title, artist);
   const t0 = want.titles[0];
   const a0 = want.artists.find((a) => !/[,&]/.test(a)) || want.artists[0] || '';
   if (!t0) return null;
-  const json = await lyricsPageJson(`https://genius.com/api/search/song?q=${encodeURIComponent(`${t0} ${a0}`.trim())}`);
+
+  // 1. Try public search
+  let json = await lyricsPageJson(`https://genius.com/api/search/song?q=${encodeURIComponent(`${t0} ${a0}`.trim())}`);
+
+  // 1b. If public search blocked, try Genius API with client token
+  if (!json || !json.response || !json.response.sections) {
+    try {
+      const apiRes = await fetch(`https://api.genius.com/search?q=${encodeURIComponent(`${t0} ${a0}`.trim())}`, {
+        headers: { 'Authorization': 'Bearer ' + GENIUS_CLIENT_TOKEN, 'User-Agent': 'EclipseMusicPlayer/43.1.0' }
+      });
+      if (apiRes.ok) {
+        const apiJson = await apiRes.json();
+        json = { response: { sections: [{ hits: apiJson?.response?.hits || [] }] } };
+      }
+    } catch (_) {}
+  }
+
   const sections = (json && json.response && json.response.sections) || [];
   const hits = sections.flatMap((s) => (s && s.hits) || []);
   const url = lyricsSources.pickGeniusHit(hits, t0, want.artists.join(', '));
-  if (!url) return null;
-  const html = await lyricsPageText(url);
-  const text = html ? lyricsSources.extractGeniusLyrics(html) : '';
-  return text || null;
-}
+  if (url) {
+    const html = await lyricsPageText(url);
+    const text = html ? lyricsSources.extractGeniusLyrics(html) : '';
+    if (text) return text;
+  }
 
+  // 2. Fallback when Genius is Cloudflare-protected or yields no html lyrics:
+  // Query plain text lyrics from index using clean title & lead artist
+  try {
+    const cleanLeadArtist = a0.replace(/\s*(?:ft\.?|feat\.?|cùng\s*với)\s.*$/i, '').trim();
+    const qStr = encodeURIComponent(`${t0} ${cleanLeadArtist}`.trim());
+    const fallbackRes = await lrclibJson(`/api/search?q=${qStr}`);
+    if (Array.isArray(fallbackRes)) {
+      const match = fallbackRes.find(item => item && (item.plainLyrics || item.syncedLyrics));
+      if (match) {
+        const lyr = match.plainLyrics || (match.syncedLyrics ? match.syncedLyrics.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim() : '');
+        if (lyr && lyr.trim().length > 20) return lyr.trim();
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
 
 function sanitizeForLyrics(title, artist) {
   let cleanTitle = (title || '')
