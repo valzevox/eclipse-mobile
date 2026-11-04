@@ -281,8 +281,8 @@
   // the phone's own playback rows go to Tracks → Playback
   const playbackGroup = document.querySelector('.m3-group[data-group="playback"]');
   const addPlaybackRow = (row) => { if (playbackGroup) playbackGroup.append(row); else trRow.parentElement.insertBefore(row, trRow); };
-  if (window.MurielLiveActivity && trRow) {
-    const la = window.MurielLiveActivity;
+  if (window.EclipseLiveActivity && trRow) {
+    const la = window.EclipseLiveActivity;
     const row = document.createElement('div');
     row.className = 'setting-item';
     row.innerHTML = `

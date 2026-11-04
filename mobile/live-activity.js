@@ -7,7 +7,7 @@ const KEY = 'muriel_live_activity';
 
 module.exports = function liveActivity() {
   if (Capacitor.getPlatform() !== 'ios') return;
-  const plugin = registerPlugin('MurielLiveActivity');
+  const plugin = registerPlugin('EclipseLiveActivity');
   const enabled = () => localStorage.getItem(KEY) !== '0';
   const send = (method, data) => { if (enabled()) plugin[method](data).catch(() => {}); };
 
@@ -62,7 +62,7 @@ module.exports = function liveActivity() {
   if (window.MurielCore) hook(); else window.addEventListener('muriel:ready', hook, { once: true });
 
   // for the switch in Settings (mobile-ui.js)
-  window.MurielLiveActivity = {
+  window.EclipseLiveActivity = {
     enabled,
     available: () => plugin.isAvailable().then((r) => !!(r && r.available)).catch(() => false),
     setEnabled(on) {
