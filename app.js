@@ -20881,7 +20881,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   
+  
   // --- ECLIPSE DONATE FEATURE ---
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const CURRENT_MOB_VERSION = '1.0.36';
+
+  function recordDonateUserAction(actionName) {
+    try {
+      localStorage.setItem('eclipse_donate_last_action', actionName);
+      localStorage.setItem('eclipse_donate_last_action_time', Date.now().toString());
+    } catch (_) {}
+  }
+
   function openExternalLink(url) {
     if (!url) return;
     try {
@@ -20898,12 +20909,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function openDonateModal(isMilestone = false) {
     const modal = document.getElementById('donate-modal');
     if (!modal) return;
-    const subtitle = document.getElementById('donate-modal-subtitle');
-    if (subtitle) {
-      subtitle.textContent = isMilestone
-        ? 'Cảm ơn bạn đã đồng hành cùng Eclipse! Hãy ủng hộ dev một ly cà phê nếu bạn thấy app hữu ích nhé ☕'
-        : 'Mời lập trình viên ly cà phê để tiếp tục duy trì app';
-    }
     if (typeof openModal === 'function') {
       openModal(modal);
     } else {
@@ -20923,12 +20928,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function handleLaterAction() {
+    recordDonateUserAction('clicked_later');
+    try {
+      localStorage.setItem('eclipse_donate_last_prompt', Date.now().toString());
+    } catch (_) {}
+    closeDonateModal();
+    if (typeof showToast === 'function') {
+      showToast('Cảm ơn bạn! Eclipse sẽ nhắc lại sau 1 tuần.', 'info');
+    }
+  }
+
   function initDonateFeature() {
     const btnSidebar = document.getElementById('btn-sidebar-donate');
     if (btnSidebar) {
       btnSidebar.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('opened_from_sidebar');
         openDonateModal(false);
       };
     }
@@ -20938,6 +20955,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnSettings.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('opened_from_settings');
         openDonateModal(false);
       };
     }
@@ -20947,7 +20965,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnClose.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        closeDonateModal();
+        handleLaterAction();
       };
     }
 
@@ -20956,7 +20974,16 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCloseOk.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        closeDonateModal();
+        handleLaterAction();
+      };
+    }
+
+    const btnLater = document.getElementById('btn-donate-later');
+    if (btnLater) {
+      btnLater.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleLaterAction();
       };
     }
 
@@ -20965,12 +20992,9 @@ document.addEventListener('DOMContentLoaded', () => {
       btnDismissForever.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('clicked_dismiss_forever');
         try {
           localStorage.setItem('eclipse_donate_dismissed', 'forever');
-          if (window.electronAPI && window.electronAPI.storageSaveSync && window.__RIFF_STORAGE_MAP__) {
-            window.__RIFF_STORAGE_MAP__['eclipse_donate_dismissed'] = 'forever';
-            try { window.electronAPI.storageSaveSync(window.__RIFF_STORAGE_MAP__); } catch (_) {}
-          }
         } catch (_) {}
         closeDonateModal();
         if (typeof showToast === 'function') {
@@ -20982,7 +21006,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('donate-modal');
     if (modal) {
       modal.onclick = (e) => {
-        if (e.target === modal) closeDonateModal();
+        if (e.target === modal) handleLaterAction();
       };
     }
 
@@ -20994,6 +21018,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tabs.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const tabKey = btn.dataset.tab;
+        recordDonateUserAction('tab_' + tabKey);
         document.querySelectorAll('.donate-tab-content').forEach(c => c.classList.add('hidden'));
         const target = document.getElementById('donate-tab-' + tabKey);
         if (target) target.classList.remove('hidden');
@@ -21006,6 +21031,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.stopPropagation();
         const url = btn.dataset.url;
+        recordDonateUserAction('opened_link_' + url);
         if (url) openExternalLink(url);
       };
     });
@@ -21034,6 +21060,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCopyStk.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('copied_stk');
         copyText('57995999', 'Đã copy số tài khoản MBBank: 57995999!');
       };
     }
@@ -21043,6 +21070,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCopyBep20.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('copied_bep20');
         copyText('0x37d1e10a2ba7f99ba758b644510c73ef16d5dd77', 'Đã copy địa chỉ ví BNB Smart Chain (BEP20)!');
       };
     }
@@ -21052,37 +21080,65 @@ document.addEventListener('DOMContentLoaded', () => {
       btnCopyTrc20.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        recordDonateUserAction('copied_trc20');
         copyText('TL4eNxibcgmSx3RsnMN3QLZcLnKcXFAS27', 'Đã copy địa chỉ ví Tron (TRC20)!');
       };
     }
   }
 
-  function checkDonatePromptMilestone() {
+  function checkMobileStartupDonatePrompt() {
     try {
+      const isFirstRun = !localStorage.getItem('eclipse_first_launch_done');
+      if (isFirstRun) {
+        // Never show on first run after install!
+        localStorage.setItem('eclipse_first_launch_done', 'true');
+        localStorage.setItem('eclipse_first_launch_time', Date.now().toString());
+        localStorage.setItem('eclipse_last_seen_version', CURRENT_MOB_VERSION);
+        localStorage.setItem('eclipse_donate_last_prompt', Date.now().toString());
+        return;
+      }
+
+      const lastSeenVersion = localStorage.getItem('eclipse_last_seen_version') || '';
+      const isAppUpdated = lastSeenVersion && lastSeenVersion !== CURRENT_MOB_VERSION;
       const dismissed = localStorage.getItem('eclipse_donate_dismissed');
-      if (dismissed === 'forever') return;
 
-      let playedCount = parseInt(localStorage.getItem('eclipse_tracks_played_count') || '0', 10) + 1;
-      localStorage.setItem('eclipse_tracks_played_count', String(playedCount));
-
-      // Trigger milestone after 20 tracks played
-      if (playedCount < 20) return;
+      if (dismissed === 'forever' && !isAppUpdated) {
+        return;
+      }
 
       const lastPrompt = parseInt(localStorage.getItem('eclipse_donate_last_prompt') || '0', 10);
       const now = Date.now();
-      const FOURTEEN_DAYS = 14 * 24 * 60 * 60 * 1000;
+      const elapsed = now - lastPrompt;
 
-      if (!lastPrompt || (now - lastPrompt >= FOURTEEN_DAYS)) {
-        localStorage.setItem('eclipse_donate_last_prompt', String(now));
+      // Show if app updated OR if 1 week (7 days) has passed
+      if (isAppUpdated || elapsed >= SEVEN_DAYS_MS) {
+        localStorage.setItem('eclipse_last_seen_version', CURRENT_MOB_VERSION);
+        localStorage.setItem('eclipse_donate_last_prompt', now.toString());
+        if (dismissed === 'forever') {
+          localStorage.removeItem('eclipse_donate_dismissed');
+        }
+
         setTimeout(() => {
-          openDonateModal(true);
-        }, 2000);
+          const subtitle = document.getElementById('donate-modal-subtitle');
+          if (subtitle) {
+            subtitle.textContent = isAppUpdated
+              ? 'Eclipse Mobile vừa cập nhật bản mới! Mời dev một ly cà phê nếu bạn thấy app hữu ích nhé ☕'
+              : 'Bạn đang nghe nhạc cùng Eclipse Mobile! Hãy mời dev một ly cà phê nhé ☕';
+          }
+          openDonateModal(false);
+        }, 2500);
       }
     } catch (_) {}
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDonateFeature);
+    document.addEventListener('DOMContentLoaded', () => {
+      initDonateFeature();
+      checkMobileStartupDonatePrompt();
+    });
   } else {
-    setTimeout(initDonateFeature, 100);
+    setTimeout(() => {
+      initDonateFeature();
+      checkMobileStartupDonatePrompt();
+    }, 100);
   }

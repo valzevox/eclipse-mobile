@@ -3786,9 +3786,12 @@
           </div>
         </div>
 
-        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); padding-top: 14px;">
-          <button class="btn-text" id="btn-donate-dismiss-forever" type="button" style="font-size: 12px; color: var(--md-sys-color-outline); cursor: pointer;">Đã ủng hộ / Không nhắc lại</button>
-          <button class="btn-pill-primary" id="btn-close-donate-ok" type="button" style="padding: 6px 18px; font-size: 13px; cursor: pointer;">Đóng</button>
+        <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); padding-top: 14px;">
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-outline-pill" id="btn-donate-later" type="button" style="flex: 1; padding: 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; border-radius: 12px;">Để sau (1 tuần)</button>
+            <button class="btn-pill-primary" id="btn-close-donate-ok" type="button" style="flex: 1; padding: 12px; font-size: 13px; font-weight: 600; cursor: pointer; text-align: center; border-radius: 12px; background: #ff5e5b; color: #fff;">Đóng</button>
+          </div>
+          <button class="btn-text" id="btn-donate-dismiss-forever" type="button" style="font-size: 12px; color: var(--md-sys-color-outline); cursor: pointer; padding: 6px; text-align: center;">Đã ủng hộ / Không bao giờ nhắc lại</button>
         </div>
       </div>
     </div>
