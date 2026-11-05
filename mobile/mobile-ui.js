@@ -792,3 +792,31 @@
   } else {
     setTimeout(injectPureBlackSetting, 400);
   }
+
+
+  // Auto-record streamed track to Cached Auto-Playlist via MediaSession
+  try {
+    if (typeof MediaSession !== 'undefined' && MediaSession.prototype) {
+      const origMetadataDesc = Object.getOwnPropertyDescriptor(MediaSession.prototype, 'metadata');
+      if (origMetadataDesc && origMetadataDesc.set) {
+        const origSet = origMetadataDesc.set;
+        Object.defineProperty(MediaSession.prototype, 'metadata', {
+          set: function(val) {
+            if (val && val.title && typeof window.recordCachedTrack === 'function') {
+              window.recordCachedTrack({
+                id: (val.title + '-' + (val.artist || '')).toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                title: val.title,
+                artist: val.artist || 'Unknown Artist',
+                cover: (val.artwork && val.artwork.length) ? val.artwork[0].src : ''
+              });
+            }
+            return origSet.call(this, val);
+          },
+          configurable: true,
+          enumerable: true
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[AutoCache] MediaSession hook error:', err);
+  }
