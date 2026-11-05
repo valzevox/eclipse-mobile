@@ -1044,3 +1044,69 @@ html.pure-black-mode #view-settings .settings-section {
   background: #0a0a0a !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
+
+
+/* -------------------------------------------------------------
+   LOCAL MUSIC FOLDER TOOLBAR & DURATION FILTER
+   ------------------------------------------------------------- */
+.local-folder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 12px;
+  gap: 10px;
+}
+
+.local-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.local-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.local-action-pill:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.local-action-pill.primary {
+  background: var(--md-sys-color-primary, #6bb9ff);
+  color: var(--md-sys-color-on-primary, #003355);
+  border-color: transparent;
+}
+
+.local-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  user-select: none;
+}
+
+.local-filter-chip.active {
+  background: rgba(107, 185, 255, 0.2);
+  border-color: rgba(107, 185, 255, 0.4);
+  color: #6bb9ff;
+}

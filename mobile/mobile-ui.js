@@ -820,3 +820,113 @@
   } catch (err) {
     console.warn('[AutoCache] MediaSession hook error:', err);
   }
+
+
+  /* -----------------------------------------------------------
+     LOCAL MUSIC TOOLBAR (PLAY ALL, SHUFFLE & FILTER < 30S)
+     ----------------------------------------------------------- */
+  function injectLocalToolbar() {
+    const localView = document.getElementById('view-local');
+    if (!localView) return;
+    if (document.getElementById('local-folder-toolbar')) return;
+
+    const toolbar = document.createElement('div');
+    toolbar.id = 'local-folder-toolbar';
+    toolbar.className = 'local-folder-toolbar';
+
+    toolbar.innerHTML = `
+      <div class="local-toolbar-actions">
+        <button class="local-action-pill primary" id="btn-local-play-all">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>Play All</span>
+        </button>
+        <button class="local-action-pill" id="btn-local-shuffle">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 3 21 3 21 8"></polyline>
+            <line x1="4" y1="20" x2="21" y2="3"></line>
+            <polyline points="21 16 21 21 16 21"></polyline>
+            <line x1="15" y1="15" x2="21" y2="21"></line>
+            <line x1="4" y1="4" x2="9" y2="9"></line>
+          </svg>
+          <span>Shuffle</span>
+        </button>
+      </div>
+
+      <div class="local-filter-chip" id="chip-filter-short">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>Hide &lt; 30s</span>
+      </div>
+    `;
+
+    const searchBox = document.getElementById('local-search-box');
+    if (searchBox) {
+      localView.insertBefore(toolbar, searchBox.nextSibling);
+    } else {
+      localView.appendChild(toolbar);
+    }
+
+    // Bind Play All
+    document.getElementById('btn-local-play-all')?.addEventListener('click', () => {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+        window.Capacitor.Plugins.Haptics.impact({ style: 'medium' }).catch(() => {});
+      }
+      const firstTrack = document.querySelector('#local-tracks-list .track-item');
+      if (firstTrack) firstTrack.click();
+    });
+
+    // Bind Shuffle
+    document.getElementById('btn-local-shuffle')?.addEventListener('click', () => {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+        window.Capacitor.Plugins.Haptics.impact({ style: 'medium' }).catch(() => {});
+      }
+      const tracks = document.querySelectorAll('#local-tracks-list .track-item');
+      if (tracks.length > 0) {
+        const randIdx = Math.floor(Math.random() * tracks.length);
+        tracks[randIdx].click();
+      }
+    });
+
+    // Bind Filter < 30s
+    let hideShort = localStorage.getItem('eclipse_hide_short_tracks') === 'true';
+    const filterChip = document.getElementById('chip-filter-short');
+    if (filterChip) {
+      if (hideShort) filterChip.classList.add('active');
+      filterChip.addEventListener('click', () => {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+          window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+        }
+        hideShort = !hideShort;
+        filterChip.classList.toggle('active', hideShort);
+        localStorage.setItem('eclipse_hide_short_tracks', hideShort ? 'true' : 'false');
+
+        // Apply filter to DOM list
+        const items = document.querySelectorAll('#local-tracks-list .track-item');
+        items.forEach(item => {
+          const durText = item.querySelector('.track-duration')?.textContent || '';
+          if (hideShort && durText) {
+            const parts = durText.split(':').map(Number);
+            if (parts.length === 2) {
+              const sec = parts[0] * 60 + parts[1];
+              if (sec < 30) item.style.display = 'none';
+              else item.style.display = '';
+            }
+          } else {
+            item.style.display = '';
+          }
+        });
+      });
+    }
+  }
+
+  window.injectLocalToolbar = injectLocalToolbar;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectLocalToolbar);
+  } else {
+    setTimeout(injectLocalToolbar, 500);
+  }
