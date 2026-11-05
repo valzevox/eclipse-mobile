@@ -3748,6 +3748,7 @@ function crossfadeOnTrackChange() {
   }
 
   async function playTrack(track, queueList = null, startIndex = -1, context = null) {
+  try { checkDonatePromptMilestone(); } catch (_) {}
     if (!track || !el.nativeAudio) return;
     resetLevelWatcher();
     vizPrev = null;
@@ -20877,3 +20878,128 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+
+
+  // --- ECLIPSE DONATE FEATURE ---
+  function openDonateModal(isMilestone = false) {
+    const modal = document.getElementById('donate-modal');
+    if (!modal) return;
+    const subtitle = document.getElementById('donate-modal-subtitle');
+    if (subtitle) {
+      subtitle.textContent = isMilestone
+        ? 'Cảm ơn bạn đã đồng hành cùng Eclipse! Hãy ủng hộ dev một ly cà phê nếu bạn thấy app hữu ích nhé ☕'
+        : 'Mời lập trình viên ly cà phê để tiếp tục duy trì app';
+    }
+    modal.classList.remove('hidden');
+  }
+
+  function closeDonateModal() {
+    const modal = document.getElementById('donate-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function initDonateFeature() {
+    const btnSidebar = document.getElementById('btn-sidebar-donate');
+    if (btnSidebar) btnSidebar.addEventListener('click', () => openDonateModal(false));
+
+    const btnSettings = document.getElementById('btn-settings-open-donate');
+    if (btnSettings) btnSettings.addEventListener('click', () => openDonateModal(false));
+
+    const btnClose = document.getElementById('btn-close-donate-modal');
+    if (btnClose) btnClose.addEventListener('click', closeDonateModal);
+
+    const btnCloseOk = document.getElementById('btn-close-donate-ok');
+    if (btnCloseOk) btnCloseOk.addEventListener('click', closeDonateModal);
+
+    const btnDismissForever = document.getElementById('btn-donate-dismiss-forever');
+    if (btnDismissForever) {
+      btnDismissForever.addEventListener('click', () => {
+        try {
+          localStorage.setItem('eclipse_donate_dismissed', 'forever');
+        } catch (_) {}
+        closeDonateModal();
+        if (typeof showToast === 'function') {
+          showToast('Cảm ơn bạn rất nhiều! Eclipse sẽ không nhắc lại nữa.', 'info');
+        }
+      });
+    }
+
+    const modal = document.getElementById('donate-modal');
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeDonateModal();
+      });
+    }
+
+    // Tabs
+    const tabs = document.querySelectorAll('#donate-tabs .sp-mode-btn');
+    tabs.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabs.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tabKey = btn.dataset.tab;
+        document.querySelectorAll('.donate-tab-content').forEach(c => c.classList.add('hidden'));
+        const target = document.getElementById('donate-tab-' + tabKey);
+        if (target) target.classList.remove('hidden');
+      });
+    });
+
+    // Copy helper
+    async function copyText(text, successMsg) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        if (typeof showToast === 'function') showToast(successMsg, 'success');
+      } catch (_) {
+        if (typeof showToast === 'function') showToast(text, 'info');
+      }
+    }
+
+    const btnCopyStk = document.getElementById('btn-copy-stk');
+    if (btnCopyStk) btnCopyStk.addEventListener('click', () => copyText('57995999', 'Đã copy số tài khoản MBBank: 57995999!'));
+
+    const btnCopyBep20 = document.getElementById('btn-copy-bep20');
+    if (btnCopyBep20) btnCopyBep20.addEventListener('click', () => copyText('0x37d1e10a2ba7f99ba758b644510c73ef16d5dd77', 'Đã copy địa chỉ ví BNB Smart Chain (BEP20)!'));
+
+    const btnCopyTrc20 = document.getElementById('btn-copy-trc20');
+    if (btnCopyTrc20) btnCopyTrc20.addEventListener('click', () => copyText('TL4eNxibcgmSx3RsnMN3QLZcLnKcXFAS27', 'Đã copy địa chỉ ví Tron (TRC20)!'));
+  }
+
+  function checkDonatePromptMilestone() {
+    try {
+      const dismissed = localStorage.getItem('eclipse_donate_dismissed');
+      if (dismissed === 'forever') return;
+
+      let playedCount = parseInt(localStorage.getItem('eclipse_tracks_played_count') || '0', 10) + 1;
+      localStorage.setItem('eclipse_tracks_played_count', String(playedCount));
+
+      // Trigger milestone after 20 tracks played
+      if (playedCount < 20) return;
+
+      const lastPrompt = parseInt(localStorage.getItem('eclipse_donate_last_prompt') || '0', 10);
+      const now = Date.now();
+      const FOURTEEN_DAYS = 14 * 24 * 60 * 60 * 1000;
+
+      if (!lastPrompt || (now - lastPrompt >= FOURTEEN_DAYS)) {
+        localStorage.setItem('eclipse_donate_last_prompt', String(now));
+        setTimeout(() => {
+          openDonateModal(true);
+        }, 2000);
+      }
+    } catch (_) {}
+  }
+
+  // Auto initialize donate feature when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDonateFeature);
+  } else {
+    setTimeout(initDonateFeature, 100);
+  }
