@@ -642,3 +642,405 @@ html.is-mobile #right-panel .lyric-line.active {
   text-shadow: 0 4px 24px color-mix(in srgb, var(--np-c1, #B69DF8) 45%, transparent) !important;
 }
 
+
+
+/* -------------------------------------------------------------
+   LIBRARY AUTO-PLAYLISTS HUB & EMPTY STATE ONBOARDING
+   ------------------------------------------------------------- */
+.library-auto-hub {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 10px 14px 14px;
+  margin-bottom: 8px;
+}
+
+.auto-hub-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.auto-hub-card:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.auto-hub-card.active {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.auto-hub-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.auto-hub-card:active .auto-hub-icon-wrap {
+  transform: scale(0.92);
+}
+
+.auto-hub-icon-wrap.icon-fav {
+  background: linear-gradient(135deg, rgba(255, 75, 110, 0.25), rgba(255, 45, 85, 0.12));
+  color: #ff3b69;
+  border: 1px solid rgba(255, 59, 105, 0.3);
+}
+
+.auto-hub-icon-wrap.icon-download {
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.25), rgba(39, 174, 96, 0.12));
+  color: #2ecc71;
+  border: 1px solid rgba(46, 204, 113, 0.3);
+}
+
+.auto-hub-icon-wrap.icon-cached {
+  background: linear-gradient(135deg, rgba(241, 196, 15, 0.25), rgba(230, 126, 34, 0.12));
+  color: #f1c40f;
+  border: 1px solid rgba(241, 196, 15, 0.3);
+}
+
+.auto-hub-icon-wrap.icon-top {
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.25), rgba(142, 68, 173, 0.12));
+  color: #9b59b6;
+  border: 1px solid rgba(155, 89, 182, 0.3);
+}
+
+.auto-hub-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.auto-hub-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.2px;
+}
+
+.auto-hub-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 1px;
+}
+
+/* Empty State Onboarding Card */
+.library-onboarding-card {
+  margin: 16px 14px;
+  padding: 24px 20px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.onboarding-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--md-sys-color-primary, #6bb9ff);
+  margin-bottom: 12px;
+}
+
+.onboarding-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.onboarding-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+  margin: 0 0 18px;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.onboarding-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+}
+
+.onboarding-btn:active {
+  transform: scale(0.97);
+}
+
+.onboarding-btn.primary {
+  background: var(--md-sys-color-primary, #6bb9ff);
+  color: var(--md-sys-color-on-primary, #003355);
+}
+
+.onboarding-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+
+/* -------------------------------------------------------------
+   HOME HERO CAROUSEL & MOOD CHIPS (CHECKPOINT 2)
+   ------------------------------------------------------------- */
+.home-hero-carousel-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.home-hero-carousel {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 8px 16px 14px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.home-hero-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.hero-slide-card {
+  flex: 0 0 84vw;
+  max-width: 360px;
+  height: 160px;
+  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+  scroll-snap-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transform: translateZ(0);
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.hero-slide-card:active {
+  transform: scale(0.97);
+}
+
+.hero-slide-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.65) saturate(1.2);
+  transition: transform 0.4s ease;
+}
+
+.hero-slide-card:active .hero-slide-bg {
+  transform: scale(1.05);
+}
+
+.hero-slide-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.75) 100%);
+}
+
+.hero-slide-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+}
+
+.hero-tag {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.hero-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+  margin: 0 0 4px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.hero-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* MOOD CHIPS ROW */
+.home-mood-chips-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 16px 12px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.home-mood-chips-row::-webkit-scrollbar {
+  display: none;
+}
+
+.mood-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mood-chip:active {
+  transform: scale(0.94);
+}
+
+.mood-chip.active {
+  background: var(--md-sys-color-primary, #6bb9ff);
+  color: var(--md-sys-color-on-primary, #003355);
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+
+/* -------------------------------------------------------------
+   SETTINGS INSET GROUPED CARDS & LIQUID GLASS (CHECKPOINT 3)
+   ------------------------------------------------------------- */
+#view-settings {
+  padding: 12px 14px 40px !important;
+}
+
+#view-settings .settings-section {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 20px !important;
+  padding: 14px 16px !important;
+  margin-bottom: 14px !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+#view-settings .settings-section h3 {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.8px !important;
+  color: var(--md-sys-color-primary, #6bb9ff) !important;
+  margin-bottom: 12px !important;
+}
+
+#view-settings .settings-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+#view-settings .settings-row:last-child {
+  border-bottom: none !important;
+}
+
+/* LIQUID GLASS MINI PLAYER & BOTTOM BAR */
+html.is-mobile .playbar {
+  background: rgba(18, 18, 22, 0.75) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.is-mobile .sidebar {
+  background: rgba(14, 14, 18, 0.8) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* PURE BLACK OLED THEME */
+html.pure-black-mode,
+html.pure-black-mode body,
+html.pure-black-mode .main-content,
+html.pure-black-mode #view-settings,
+html.pure-black-mode .content-view {
+  background: #000000 !important;
+}
+
+html.pure-black-mode .playbar,
+html.pure-black-mode .sidebar {
+  background: rgba(0, 0, 0, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+html.pure-black-mode #view-settings .settings-section {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}

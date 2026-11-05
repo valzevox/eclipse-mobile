@@ -402,3 +402,393 @@
     window.MurielCore.toast((window.MurielI18n || { T: (x) => x, Tm: (x) => x }).Tm('Could not save to storage. Is your phone full?'), 'error');
   });
 })();
+
+
+  /* -----------------------------------------------------------
+     AUTO-PLAYLISTS & LIBRARY ONBOARDING HUB
+     ----------------------------------------------------------- */
+  let currentAutoType = 'favorites';
+
+  function updateAutoPlaylistCounts() {
+    try {
+      // 1. Liked count
+      const favList = window.favorites || [];
+      const favEl = document.getElementById('auto-count-liked');
+      if (favEl) favEl.textContent = favList.length + ' tracks';
+
+      // 2. Downloaded count
+      let downCount = 0;
+      if (window.downloadedTracks && Array.isArray(window.downloadedTracks)) {
+        downCount = window.downloadedTracks.length;
+      } else if (window.downloadsMap && typeof window.downloadsMap === 'object') {
+        downCount = Object.keys(window.downloadsMap).length;
+      }
+      const downEl = document.getElementById('auto-count-downloaded');
+      if (downEl) downEl.textContent = downCount + ' tracks';
+
+      // 3. Cached count
+      const cachedList = getCachedTracksList();
+      const cachedEl = document.getElementById('auto-count-cached');
+      if (cachedEl) cachedEl.textContent = cachedList.length + ' tracks';
+
+      // 4. Top 50 count
+      const topList = getTop50TracksList();
+      const topEl = document.getElementById('auto-count-top');
+      if (topEl) topEl.textContent = topList.length + ' tracks';
+
+      // Update empty state onboarding
+      updateLibraryEmptyState();
+    } catch (e) {
+      console.warn('[AutoHub] Update counts error:', e);
+    }
+  }
+
+  function getCachedTracksList() {
+    try {
+      const raw = localStorage.getItem('eclipse_cached_tracks');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function recordCachedTrack(track) {
+    if (!track || !track.id) return;
+    try {
+      let list = getCachedTracksList();
+      list = list.filter(t => t.id !== track.id);
+      list.unshift({
+        id: track.id,
+        title: track.title || 'Unknown Title',
+        artist: track.artist || 'Unknown Artist',
+        cover: track.cover || '',
+        duration: track.duration || 0,
+        cachedAt: Date.now()
+      });
+      if (list.length > 100) list = list.slice(0, 100);
+      localStorage.setItem('eclipse_cached_tracks', JSON.stringify(list));
+      updateAutoPlaylistCounts();
+    } catch (e) {
+      console.warn('[AutoHub] Record cached error:', e);
+    }
+  }
+
+  function getTop50TracksList() {
+    try {
+      const history = window.playHistory || [];
+      const countMap = {};
+      const trackMap = {};
+      for (const item of history) {
+        const id = item.id || (item.track && item.track.id);
+        if (!id) continue;
+        countMap[id] = (countMap[id] || 0) + 1;
+        if (!trackMap[id]) trackMap[id] = item.track || item;
+      }
+      return Object.keys(countMap)
+        .map(id => ({ track: trackMap[id], count: countMap[id] }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 50)
+        .map(item => item.track);
+    } catch {
+      return [];
+    }
+  }
+
+  function switchAutoPlaylistView(type) {
+    currentAutoType = type;
+    document.querySelectorAll('.auto-hub-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.autoType === type);
+    });
+
+    const titleEl = document.querySelector('#view-favorites .view-header h2');
+    const listContainer = document.getElementById('favorites-tracks-list');
+    if (!listContainer) return;
+
+    if (type === 'favorites') {
+      if (titleEl) titleEl.textContent = 'Liked Songs';
+      if (typeof window.renderFavoritesView === 'function') {
+        window.renderFavoritesView();
+      }
+    } else if (type === 'downloaded') {
+      if (titleEl) titleEl.textContent = 'Downloaded';
+      renderCustomTrackCollection(window.downloadedTracks || [], 'No downloaded tracks yet.');
+    } else if (type === 'cached') {
+      if (titleEl) titleEl.textContent = 'Cached Music';
+      renderCustomTrackCollection(getCachedTracksList(), 'No cached music yet. Songs you stream will be cached here.');
+    } else if (type === 'top') {
+      if (titleEl) titleEl.textContent = 'Top 50 Most Played';
+      renderCustomTrackCollection(getTop50TracksList(), 'Play more tracks to see your top listened songs here.');
+    }
+  }
+
+  function renderCustomTrackCollection(tracks, emptyMsg) {
+    const container = document.getElementById('favorites-tracks-list');
+    if (!container) return;
+    if (!tracks || tracks.length === 0) {
+      container.innerHTML = '<div class="empty-hint">' + emptyMsg + '</div>';
+      return;
+    }
+    if (typeof window.renderTrackListHtml === 'function') {
+      container.innerHTML = window.renderTrackListHtml(tracks);
+    } else {
+      container.innerHTML = '<div class="empty-hint">' + tracks.length + ' tracks available.</div>';
+    }
+  }
+
+  function updateLibraryEmptyState() {
+    const favList = window.favorites || [];
+    const downCount = (window.downloadedTracks || []).length;
+    const cachedCount = getCachedTracksList().length;
+    const isTotallyEmpty = (favList.length === 0 && downCount === 0 && cachedCount === 0);
+
+    let onboardingEl = document.getElementById('library-onboarding-hub');
+    const container = document.getElementById('view-favorites');
+    if (!container) return;
+
+    if (isTotallyEmpty) {
+      if (!onboardingEl) {
+        onboardingEl = document.createElement('div');
+        onboardingEl.id = 'library-onboarding-hub';
+        onboardingEl.className = 'library-onboarding-card';
+        onboardingEl.innerHTML = `
+          <div class="onboarding-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <span>Welcome to Eclipse</span>
+          </div>
+          <h3 class="onboarding-title">Your library is waiting</h3>
+          <p class="onboarding-desc">Discover hot trending songs, import your existing playlists, or listen to songs on your device.</p>
+          <div class="onboarding-actions">
+            <button class="onboarding-btn primary" id="btn-onboarding-explore">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill="currentColor"></polygon>
+              </svg>
+              <span>Explore Trending Songs</span>
+            </button>
+            <button class="onboarding-btn secondary" id="btn-onboarding-local">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Scan Local Files</span>
+            </button>
+          </div>
+        `;
+        const tracksList = document.getElementById('favorites-tracks-list');
+        if (tracksList) {
+          container.insertBefore(onboardingEl, tracksList);
+        } else {
+          container.appendChild(onboardingEl);
+        }
+
+        document.getElementById('btn-onboarding-explore')?.addEventListener('click', () => {
+          if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+            window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+          }
+          const navDiscover = document.getElementById('nav-discover');
+          if (navDiscover) navDiscover.click();
+        });
+
+        document.getElementById('btn-onboarding-local')?.addEventListener('click', () => {
+          if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+            window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+          }
+          const navLocal = document.getElementById('nav-local');
+          if (navLocal) navLocal.click();
+        });
+      }
+    } else {
+      if (onboardingEl) onboardingEl.remove();
+    }
+  }
+
+  function initAutoPlaylists() {
+    const hub = document.getElementById('library-auto-hub');
+    if (!hub) return;
+    hub.addEventListener('click', (e) => {
+      const card = e.target.closest('.auto-hub-card');
+      if (!card) return;
+      const type = card.dataset.autoType;
+      if (type) {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+          window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+        }
+        switchAutoPlaylistView(type);
+      }
+    });
+
+    updateAutoPlaylistCounts();
+  }
+
+  window.initAutoPlaylists = initAutoPlaylists;
+  window.updateAutoPlaylistCounts = updateAutoPlaylistCounts;
+  window.recordCachedTrack = recordCachedTrack;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAutoPlaylists);
+  } else {
+    setTimeout(initAutoPlaylists, 200);
+  }
+
+
+  /* -----------------------------------------------------------
+     HOME HERO CAROUSEL & MOOD CHIPS LOGIC
+     ----------------------------------------------------------- */
+  function injectHomeHeroCarousel() {
+    const discoverView = document.getElementById('view-discover');
+    if (!discoverView) return;
+    if (document.getElementById('home-hero-carousel-wrap')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'home-hero-carousel-wrap';
+    wrap.className = 'home-hero-carousel-wrap';
+
+    wrap.innerHTML = `
+      <!-- Mood Chips -->
+      <div class="home-mood-chips-row" id="home-mood-chips">
+        <div class="mood-chip active" data-mood="all">All</div>
+        <div class="mood-chip" data-mood="relax">Relax</div>
+        <div class="mood-chip" data-mood="workout">Workout</div>
+        <div class="mood-chip" data-mood="focus">Focus</div>
+        <div class="mood-chip" data-mood="energy">Energy</div>
+        <div class="mood-chip" data-mood="party">Party</div>
+      </div>
+
+      <!-- Hero Carousel -->
+      <div class="home-hero-carousel" id="home-hero-carousel">
+        <div class="hero-slide-card" data-action="explore-trending">
+          <img class="hero-slide-bg" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80" alt="Trending">
+          <div class="hero-slide-scrim"></div>
+          <div class="hero-slide-content">
+            <span class="hero-tag">Trending Now</span>
+            <h3 class="hero-title">Global Hot 50</h3>
+            <span class="hero-subtitle">The most played tracks worldwide today</span>
+          </div>
+        </div>
+
+        <div class="hero-slide-card" data-action="explore-new">
+          <img class="hero-slide-bg" src="https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80" alt="New Releases">
+          <div class="hero-slide-scrim"></div>
+          <div class="hero-slide-content">
+            <span class="hero-tag">Fresh Picks</span>
+            <h3 class="hero-title">New Releases</h3>
+            <span class="hero-subtitle">Latest singles, EPs & albums from top artists</span>
+          </div>
+        </div>
+
+        <div class="hero-slide-card" data-action="explore-chill">
+          <img class="hero-slide-bg" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80" alt="Chill & Lo-Fi">
+          <div class="hero-slide-scrim"></div>
+          <div class="hero-slide-content">
+            <span class="hero-tag">Chill Vibes</span>
+            <h3 class="hero-title">Deep Focus & Lo-Fi</h3>
+            <span class="hero-subtitle">Calm beats to keep you inspired and relaxed</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const firstChild = discoverView.firstElementChild;
+    if (firstChild) {
+      discoverView.insertBefore(wrap, firstChild.nextSibling);
+    } else {
+      discoverView.appendChild(wrap);
+    }
+
+    // Bind Mood chips
+    const chips = wrap.querySelectorAll('.mood-chip');
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+          window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+        }
+        chips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const mood = chip.dataset.mood;
+        const searchInput = document.getElementById('search-input');
+        if (searchInput && mood !== 'all') {
+          searchInput.value = mood + ' music';
+          searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
+
+    // Bind Carousel click
+    const slides = wrap.querySelectorAll('.hero-slide-card');
+    slides.forEach(slide => {
+      slide.addEventListener('click', () => {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+          window.Capacitor.Plugins.Haptics.impact({ style: 'medium' }).catch(() => {});
+        }
+        const action = slide.dataset.action;
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+          if (action === 'explore-trending') searchInput.value = 'trending';
+          else if (action === 'explore-new') searchInput.value = 'new releases';
+          else if (action === 'explore-chill') searchInput.value = 'lofi chill';
+          searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
+  }
+
+  window.injectHomeHeroCarousel = injectHomeHeroCarousel;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectHomeHeroCarousel);
+  } else {
+    setTimeout(injectHomeHeroCarousel, 300);
+  }
+
+
+  /* -----------------------------------------------------------
+     PURE BLACK AMOLED TOGGLE IN SETTINGS
+     ----------------------------------------------------------- */
+  function injectPureBlackSetting() {
+    const appearanceSection = document.querySelector('#view-settings .settings-section');
+    if (!appearanceSection) return;
+    if (document.getElementById('setting-row-amoled')) return;
+
+    const row = document.createElement('div');
+    row.id = 'setting-row-amoled';
+    row.className = 'settings-row';
+    row.innerHTML = `
+      <div>
+        <div style="font-weight:600; font-size:14px; color:#fff;">Pure Black (AMOLED)</div>
+        <div style="font-size:12px; color:rgba(255,255,255,0.55); margin-top:2px;">Turn off background blur and use true #000000 black to save battery.</div>
+      </div>
+      <label class="switch" style="position:relative; display:inline-block; width:44px; height:24px;">
+        <input type="checkbox" id="toggle-pure-black" style="opacity:0; width:0; height:0;">
+        <span class="slider round" style="position:absolute; cursor:pointer; inset:0; background:#333; border-radius:24px; transition:.3s;"></span>
+      </label>
+    `;
+
+    appearanceSection.appendChild(row);
+
+    const toggle = document.getElementById('toggle-pure-black');
+    const isAmoled = localStorage.getItem('eclipse_pure_black') === 'true';
+    if (toggle) {
+      toggle.checked = isAmoled;
+      if (isAmoled) document.documentElement.classList.add('pure-black-mode');
+
+      toggle.addEventListener('change', () => {
+        if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Haptics) {
+          window.Capacitor.Plugins.Haptics.impact({ style: 'light' }).catch(() => {});
+        }
+        const enabled = toggle.checked;
+        localStorage.setItem('eclipse_pure_black', enabled ? 'true' : 'false');
+        document.documentElement.classList.toggle('pure-black-mode', enabled);
+      });
+    }
+  }
+
+  window.injectPureBlackSetting = injectPureBlackSetting;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectPureBlackSetting);
+  } else {
+    setTimeout(injectPureBlackSetting, 400);
+  }
