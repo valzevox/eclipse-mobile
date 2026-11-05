@@ -24,8 +24,16 @@
     <img src="https://img.shields.io/badge/Download_APK-6750A4?style=for-the-badge&logo=android&logoColor=white" height="40" alt="Download APK">
   </a>
   &nbsp;
-  <a href="https://github.com/valzevox/eclipse-mobile/releases/latest">
-    <img src="https://img.shields.io/github/v/release/valzevox/eclipse-mobile?style=for-the-badge&labelColor=16191C&color=CAD3F5" height="40" alt="Latest Release">
+  <a href="https://eclipse-player.vercel.app">
+    <img src="https://img.shields.io/badge/Website-1F2328?style=for-the-badge&logo=open-webui&logoColor=white" height="40" alt="Visit Website">
+  </a>
+  &nbsp;
+  <a href="https://ko-fi.com/m1n698">
+    <img src="https://img.shields.io/badge/Donate-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" height="40" alt="Ko-fi">
+  </a>
+  &nbsp;
+  <a href="https://zypage.com/m1n6">
+    <img src="https://img.shields.io/badge/Donate-ZyPage-6366F1?style=for-the-badge&logo=linktree&logoColor=white" height="40" alt="ZyPage">
   </a>
 </p>
 
@@ -169,6 +177,33 @@ Yes. Downloaded tracks and local audio files (FLAC, MP3, WAV, etc.) play entirel
 Simply paste a public playlist link from Spotify, Apple Music, SoundCloud, or YouTube Music. Eclipse parses all tracks and batches metadata lookups to recreate the playlist locally.
 
 ---
+
+## Contributing
+
+Pull requests, bug reports, and suggestions are welcome! Feel free to open an issue or pull request.
+
+<a href="https://github.com/valzevox/eclipse-mobile/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=valzevox/eclipse-mobile" alt="Eclipse Mobile Contributors" />
+</a>
+
+## Support & Donate
+
+Eclipse Mobile is an independent, ad-free, open-source project. If Eclipse Mobile brings joy to your music listening, consider supporting ongoing development:
+
+<p align="left">
+  <a href="https://ko-fi.com/m1n698" target="_blank">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi">
+  </a>
+  &nbsp;
+  <a href="https://zypage.com/m1n6" target="_blank">
+    <img src="https://img.shields.io/badge/Donate-ZyPage-6366F1?style=for-the-badge&logo=linktree&logoColor=white" alt="m1n6 on ZyPage">
+  </a>
+</p>
+
+- ☕ **Ko-fi:** [ko-fi.com/m1n698](https://ko-fi.com/m1n698)
+- 💳 **ZyPage:** [m1n6 on ZyPage](https://zypage.com/m1n6)
+
+Your support helps maintain dependencies, build infrastructure, and ship regular updates!
 
 ## License
 
