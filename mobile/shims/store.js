@@ -1,5 +1,5 @@
 // Persistent storage behind the fs shim. Virtual paths under /data map to Capacitor Filesystem paths under
-// Muriel/ (IndexedDB in a browser): in Documents on iOS, visible in the Files app; in the app's private storage
+// Eclipse/ (IndexedDB in a browser): in Documents on iOS, visible in the Files app; in the app's private storage
 // on Android, except the songs people download, which go to Music/Eclipse (see "Android: downloads" below).
 const path = require('path');
 const { Filesystem, Directory, Encoding } = require('@capacitor/filesystem');
@@ -45,7 +45,7 @@ function where(vpath) {
 }
 
 // where a file being saved goes. On Android 10 and older the first download asks for the permission, without
-// waiting for the answer: with Muriel in the background the question waits for its return, and the music (which
+// waiting for the answer: with Eclipse in the background the question waits for its return, and the music (which
 // waits for files to be saved) would too. Songs saved meanwhile stay private and move once it's given.
 function saveTo(vpath) {
   if (isDownload(vpath) && !pub && mayAsk && !asked) {

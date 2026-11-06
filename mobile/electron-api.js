@@ -101,7 +101,7 @@ module.exports = function electronAPI({ ready, port, fs, fileUrlFor }) {
     getDataDir: async () => ({ dir: 'On this iPhone (Files → Eclipse)', defaultDir: '/data', isCustom: false }),
     pickDataDir: async () => null,
     setDataDir: async () => ({ success: false, error: 'The music folder is fixed on iPhone' }),
-    // fixed on phones (Settings hides Change): Files → Eclipse → Downloads on iOS, Music/Muriel on Android (shims/store.js)
+    // fixed on phones (Settings hides Change): Files → Eclipse → Downloads on iOS, Music/Eclipse on Android (shims/store.js)
     async getDownloadDir() {
       if (Capacitor.getPlatform() !== 'android') return { dir: 'Files → Eclipse → Downloads', isCustom: false };
       await ready;
@@ -111,7 +111,7 @@ module.exports = function electronAPI({ ready, port, fs, fileUrlFor }) {
     setDownloadDir: async () => ({ success: false }),
     resetDownloadDir: async () => ({ success: true }),
     restartApp: () => location.reload(),
-    getAppVersion: async () => { const b = window.MURIEL_BUILD || {}; return b.version ? `${b.version}${b.run ? ` (build ${b.run})` : ''}` : '1.0.8'; },
+    getAppVersion: async () => { const b = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {}; return b.version ? `${b.version}${b.run ? ` (build ${b.run})` : ''}` : '1.0.8'; },
     getHwAccel: async () => true,
     setHwAccel: noop,
     trimMemory: noop,
@@ -128,7 +128,7 @@ module.exports = function electronAPI({ ready, port, fs, fileUrlFor }) {
     // where "Save to Files" / Drive / Mail take it. In a desktop browser (dev harness) it's a plain download.
     async saveTextFile({ defaultName, content } = {}) {
       if (typeof content !== 'string') return { success: false, error: 'Nothing to save' };
-      const name = String(defaultName || 'muriel.json').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '').slice(0, 120) || 'muriel.json';
+      const name = String(defaultName || 'eclipse.json').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '').slice(0, 120) || 'eclipse.json';
       if (!Capacitor.isNativePlatform()) {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));

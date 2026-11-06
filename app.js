@@ -18472,7 +18472,7 @@ async function fetchAndApplyTranslation() {
       }
       const move = window.confirm(
         T('Move your existing music to the new folder?') + '\n\n' +
-        T('OK: move all downloaded and imported files, then restart Muriel.') + '\n' +
+        T('OK: move all downloaded and imported files, then restart Eclipse.') + '\n' +
         T('Cancel: switch to the new folder without moving (files stay in the old one).')
       );
       btnChangeMusicFolder.disabled = true;

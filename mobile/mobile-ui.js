@@ -305,7 +305,7 @@
     addPlaybackRow(row);
   }
 
-  // Android: let Muriel off battery optimization so the phone doesn't stop it in the background (media-controls.js)
+  // Android: let Eclipse off battery optimization so the phone doesn't stop it in the background (media-controls.js)
   if (window.MurielBackground && trRow) {
     const bg = window.MurielBackground;
     const row = document.createElement('div');
@@ -314,7 +314,7 @@
       <div class="setting-item-top" style="align-items: center;">
         <div style="display: flex; flex-direction: column; gap: 2px;">
           <span class="setting-name" data-i18n>Play in the background</span>
-          <span style="font-size: calc(12px * var(--font-scale, 1)); color: var(--md-sys-color-outline);" data-i18n>Some phones stop apps to save battery, even while music plays. Allow Muriel to keep running.</span>
+          <span style="font-size: calc(12px * var(--font-scale, 1)); color: var(--md-sys-color-outline);" data-i18n>Some phones stop apps to save battery, even while music plays. Allow Eclipse to keep running.</span>
         </div>
         <button class="btn-pill-primary" type="button" data-i18n>Allow</button>
       </div>`;
@@ -336,7 +336,7 @@
       if (!s.vendor || s.vendor === 'xiaomi' || s.vendor === 'samsung' || (!s.supported && s.vendor !== 'vivo')) return;
       const name = { vivo: 'Origin Island', oplus: 'Fluid Cloud' }[s.vendor] || 'Song in the status bar';
       const about = {
-        vivo: 'The song in the Origin Island at the top of the screen. vivo’s music capsule only takes apps on vivo’s list, so Muriel shows there as a live update.',
+        vivo: 'The song in the Origin Island at the top of the screen. vivo’s music capsule only takes apps on vivo’s list, so Eclipse shows there as a live update.',
         oplus: 'The song in Fluid Cloud at the top of the screen, as a live update.',
       }[s.vendor] || 'The song as a live update in the status bar.';
       const row = document.createElement('div');
