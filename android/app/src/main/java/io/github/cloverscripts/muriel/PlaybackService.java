@@ -89,9 +89,9 @@ public class PlaybackService extends Service {
                 // also how the notification of a service already in the foreground is updated
                 getSystemService(NotificationManager.class).notify(MediaControlsPlugin.NOTIFICATION_ID, n);
             }
-        } catch (Exception e) {
-            // not allowed to go foreground right now (Android 12+ from the background): just show it
-            try { getSystemService(NotificationManager.class).notify(MediaControlsPlugin.NOTIFICATION_ID, n); } catch (Exception ignored) {}
+        } catch (Throwable e) {
+            // not allowed to go foreground right now (Android 12+ from the background or transient window focus): just show it
+            try { getSystemService(NotificationManager.class).notify(MediaControlsPlugin.NOTIFICATION_ID, n); } catch (Throwable ignored) {}
         }
         if (foreground && !playing) handler.postDelayed(leaveForeground, PAUSED_FOREGROUND_MS);
     }

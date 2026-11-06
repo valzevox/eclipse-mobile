@@ -248,6 +248,12 @@ public class MediaControlsPlugin extends Plugin {
     // islandState; with settings: false it only asks, and never opens Settings.
     @PluginMethod
     public void allowIsland(PluginCall call) {
+        // iQOO and vivo on Android 15 and older do not support Android 16 Live Updates.
+        // Do not request unnecessary notification permission for this feature.
+        if ("vivo".equals(VENDOR) && Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            call.resolve(islandState());
+            return;
+        }
         boolean settings = !Boolean.FALSE.equals(call.getBoolean("settings", true));
         String pkg = getContext().getPackageName();
         if (!notificationsOn()) {
@@ -276,9 +282,15 @@ public class MediaControlsPlugin extends Plugin {
     @PermissionCallback
     private void notificationsAnswered(PluginCall call) {
         if (call == null) return;
-        call.resolve(islandState());
-        // allowed while a song plays: the playback notification and the island show now
-        refreshNotification();
+        try {
+            call.resolve(islandState());
+        } catch (Throwable ignored) {}
+        // allow the system dialog to dismiss and the activity to resume foreground state before posting
+        handler.postDelayed(() -> {
+            try {
+                refreshNotification();
+            } catch (Throwable ignored) {}
+        }, 200);
     }
 
     private JSObject islandState() {

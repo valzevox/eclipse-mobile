@@ -84,6 +84,9 @@ module.exports = function mediaControls() {
   // asked again). Before Android 13 notifications are on unless turned off, and then this does nothing.
   const NOTIFY_ASKED = 'muriel_island_asked';
   const askNotificationsOnce = () => island.status().then((s) => {
+    // iQOO and vivo: OriginOS 5 on Android 15 and older lacks Android 16 Live Updates.
+    // Do not trigger an unneeded notification permission prompt.
+    if (s.vendor === 'vivo' && !s.supported) return;
     if (s.notifications !== false || localStorage.getItem(NOTIFY_ASKED) || document.hidden) return;
     localStorage.setItem(NOTIFY_ASKED, '1');
     return island.allow({ settings: false });
