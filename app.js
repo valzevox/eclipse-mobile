@@ -20862,8 +20862,8 @@ async function fetchAndApplyTranslation() {
       if (has('muriel_track_trims')) trackTrims = null;
       if (has('muriel_icon_pack')) applyIconPack(localStorage.getItem('muriel_icon_pack') || 'material');
       if (has('muriel_adv_intensity_bg')) updateThemeFromState();
-      if (has('muriel_ui_lang')) {
-        const syncedLang = localStorage.getItem('muriel_ui_lang') || 'en';
+      if (has('eclipse_ui_lang') || has('muriel_ui_lang')) {
+        const syncedLang = localStorage.getItem('eclipse_ui_lang') || localStorage.getItem('muriel_ui_lang') || 'en';
         if (window.MurielI18n && window.MurielI18n.lang !== syncedLang) {
           window.MurielI18n.setLang(syncedLang);
         }

@@ -23,7 +23,7 @@
   'use strict';
 
   // ---------- pure part ----------
-  const KEY = 'muriel_ui_lang'; // per profile, like every other setting
+  const KEY = 'eclipse_ui_lang'; const LEGACY_KEY = 'muriel_ui_lang'; // per profile, like every other setting
   const SNAP = 'muriel_i18n_snap'; // device-wide (profiles-core DEVICE): the open language's words, for a quick start
   const LANG_RE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
   const RTL = new Set(['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb']);
@@ -89,7 +89,7 @@
 
   // ---------- in the app ----------
   const read = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-  let lang = normLang(read(KEY) || 'en');
+  let lang = normLang(read(KEY) || read(LEGACY_KEY) || 'en');
   let dict = new Map(); // English (normalised) -> translation, for `lang`
   let back = new Map(); // translation -> English: text code put in already translated
   let prevBack = new Map(); // the same for the language before a switch: its words on the page go back to English
@@ -372,7 +372,7 @@
   // resolves once what was missing has come in, or the service gave up for now
   async function setLang(code) {
     code = normLang(code);
-    try { localStorage.setItem(KEY, code); } catch (e) {}
+    try { localStorage.setItem(KEY, code); localStorage.setItem(LEGACY_KEY, code); } catch (e) {}
     if (code === lang && (code === 'en' || dict.size)) return true;
     lang = code;
     prevBack = back;
