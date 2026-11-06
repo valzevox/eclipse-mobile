@@ -18890,7 +18890,7 @@ async function fetchAndApplyTranslation() {
         if (typeof api.getDiagnostics === 'function') text = await api.getDiagnostics();
         else {
           // phones: no main process to ask, so the app's own details and its error log
-          text = [`Muriel ${(window.MURIEL_BUILD && window.MURIEL_BUILD.version) || ''} (${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'})`,
+          const b = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {}; text = [`Eclipse ${b.version ? `v${b.version}` : ''} (${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'})`,
             navigator.userAgent, `Language ${navigator.language}`, '--- log ---', window.MurielLog ? window.MurielLog.text() : 'no log'].join('\n');
         }
       } catch (e) { text = `Diagnostics failed: ${e && e.message}`; }

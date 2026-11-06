@@ -29,7 +29,7 @@ window.addEventListener('unhandledrejection', (e) => murielLog('error', `unhandl
 window.MurielCache = { enforceLimit: () => enforceCacheLimit() };
 window.MurielLog = {
   add: murielLog,
-  text: () => [`Muriel ${navigator.userAgent}`, `platform: ${Capacitor.getPlatform()}`, ...logLines].join('\n'),
+  text: () => { const b = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {}; return [`Eclipse ${b.version ? `v${b.version}` : ''} ${navigator.userAgent}`, `platform: ${Capacitor.getPlatform()}`, ...logLines].join('\n'); },
   clear: () => { logLines.length = 0; try { localStorage.removeItem(LOG_KEY); } catch (e) {} },
 };
 
