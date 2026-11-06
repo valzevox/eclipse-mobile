@@ -116,7 +116,7 @@
 
   function playlistFile(playlists, { appVersion = '' } = {}) {
     return {
-      app: 'Muriel',
+      app: 'Eclipse',
       appVersion: String(appVersion || ''),
       exportedAt: new Date().toISOString(),
       playlists: (playlists || []).filter(isObj).map((p) => {
@@ -131,7 +131,7 @@
   }
 
   // a file name from a playlist or profile name
-  const fileName = (name, ext) => `${clip(name, 60).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '') || 'muriel'}.${ext}`;
+  const fileName = (name, ext) => `${clip(name, 60).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '') || 'eclipse'}.${ext}`;
 
   // ---------- backups ----------
   const KEY_RE = /^(?:muriel|devsize)_[A-Za-z0-9_.:-]{1,80}$/;
@@ -153,7 +153,7 @@
   function makeBackup(entries, { profileName = '', appVersion = '', isDevice } = {}) {
     const data = {};
     for (const [k, v] of entries) if (typeof v === 'string' && backupKeyAllowed(k, isDevice)) data[k] = v;
-    return { app: 'Muriel', kind: 'muriel-backup', version: 1, appVersion: String(appVersion || ''), exportedAt: new Date().toISOString(), profile: { name: clip(profileName, 24) }, data };
+    return { app: 'Eclipse', kind: 'eclipse-backup', version: 1, appVersion: String(appVersion || ''), exportedAt: new Date().toISOString(), profile: { name: clip(profileName, 24) }, data };
   }
 
   // A stored track, as the app itself saves it. A restore keeps its own fields (text, numbers, true/false; Muriel
@@ -215,12 +215,12 @@
 
   // A backup file's contents (already parsed) -> what a restore writes. Throws an Error with a message for people.
   function readBackup(obj, { isDevice } = {}) {
-    if (!isObj(obj)) throw new Error("That file isn't a Muriel backup");
+    if (!isObj(obj)) throw new Error("That file isn't an Eclipse backup");
     let source = '';
     let raw = null;
-    if (obj.kind === 'muriel-backup' && isObj(obj.data)) { source = 'muriel'; raw = obj.data; }
-    else if (isObj(obj.localStorage) && (obj.app === 'Riff' || obj.app === 'Muriel')) { source = 'riff'; raw = obj.localStorage; }
-    if (!raw) throw new Error("That file isn't a Muriel backup or a Riff account file");
+    if ((obj.kind === 'eclipse-backup' || obj.kind === 'muriel-backup') && isObj(obj.data)) { source = 'eclipse'; raw = obj.data; }
+    else if (isObj(obj.localStorage) && (obj.app === 'Eclipse' || obj.app === 'Riff' || obj.app === 'Muriel')) { source = 'riff'; raw = obj.localStorage; }
+    if (!raw) throw new Error("That file isn't an Eclipse backup or account file");
     const entries = {};
     const skipped = [];
     let total = 0;
@@ -246,7 +246,7 @@
       source,
       entries,
       skipped,
-      profileName: source === 'muriel' && isObj(obj.profile) ? clip(obj.profile.name, 24) : '',
+      profileName: (source === 'eclipse' || source === 'muriel') && isObj(obj.profile) ? clip(obj.profile.name, 24) : '',
       counts: { playlists: count('devsize_playlists'), favorites: count('devsize_favorites'), history: count('devsize_history'), keys: Object.keys(entries).length },
     };
   }
@@ -296,7 +296,7 @@
   async function parseBackupFile(bytes) {
     if (!bytes || bytes.length > LIMITS.fileBytes) throw new Error('That file is too big');
     if (isRiffAccount(bytes)) return readRiffAccount(bytes);
-    try { return JSON.parse(new TextDecoder().decode(bytes).replace(/^\uFEFF/, '')); } catch (e) { throw new Error("That file isn't a Muriel backup"); }
+    try { return JSON.parse(new TextDecoder().decode(bytes).replace(/^\uFEFF/, '')); } catch (e) { throw new Error("That file isn't an Eclipse backup"); }
   }
 
   const api = { LIMITS, cleanSharedTrack, parsePlaylistFile, exportTrack, playlistFile, fileName, backupKeyAllowed, keepOnRestore, makeBackup, cleanStoredTrack, cleanStoredPlaylists, readBackup, isRiffAccount, readRiffAccount, parseBackupFile };

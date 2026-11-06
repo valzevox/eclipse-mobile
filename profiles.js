@@ -168,8 +168,8 @@
     const all = P.list();
     const parts = ['<span class="settings-section-title" data-i18n>Profiles</span>'];
     parts.push(`<div class="m3-group"><div class="setting-item"><div class="sync-intro">
-      <b data-i18n>A Muriel for everyone who uses this device</b>
-      <span data-i18n>Each profile has its own playlists, favorites, history, Encore stats, theme, sound and lyrics settings, and links to its own devices in Sync. Switching profiles restarts Muriel.</span>
+      <b data-i18n>An Eclipse for everyone who uses this device</b>
+      <span data-i18n>Each profile has its own playlists, favorites, history, Encore stats, theme, sound and lyrics settings, and links to its own devices in Sync. Switching profiles restarts Eclipse.</span>
     </div></div></div>`);
     const rows = all.map((p) => {
       if (editing === p.id) return `<div class="setting-item profile-row editing">${form(p)}</div>`;
