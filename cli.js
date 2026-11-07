@@ -4,7 +4,7 @@ const http = require('http');
 
 const args = process.argv;
 if (!args.includes('lyrics') && !args.includes('--lyrics')) {
-  console.log('Usage: muriel lyrics');
+  console.log('Usage: eclipse lyrics');
   process.exit(0);
 }
 

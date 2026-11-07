@@ -1,5 +1,5 @@
 {
-  description = "Muriel - a desktop audio player (Electron)";
+  description = "Eclipse - a modern audio player (Electron & Mobile)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -8,9 +8,9 @@
 
   outputs = { self, nixpkgs, flake-utils, ... }:
     let
-      mkMuriel = pkgs:
+      mkEclipse = pkgs:
         pkgs.buildNpmPackage rec {
-          pname = "muriel";
+          pname = "eclipse";
           version = "42.0.0";
           src = self;
 
@@ -71,8 +71,8 @@
       in
       {
         packages = {
-          default = mkMuriel pkgs;
-          muriel = mkMuriel pkgs;
+          default = mkEclipse pkgs;
+          muriel = mkEclipse pkgs;
         };
 
         devShells.default = pkgs.mkShell {
@@ -91,7 +91,7 @@
       })
     // {
       overlays.default = final: prev: {
-        muriel = mkMuriel final;
+        muriel = mkEclipse final;
       };
     };
 }

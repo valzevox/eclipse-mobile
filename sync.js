@@ -1,15 +1,15 @@
-// Muriel sync (free, no account): link your devices with a code or a QR code, and playlists,
+// Eclipse sync (free, no account): link your devices with a code or a QR code, and playlists,
 // favorites, history, Encore stats, the look of the app and what you're listening to stay the same on all of
-// them. There is no Muriel server and no account: every device keeps its own data, and linked devices talk to
+// them. There is no Eclipse server and no account: every device keeps its own data, and linked devices talk to
 // each other directly (WebRTC, encrypted) whenever they're open at the same time. A public PeerJS server only
 // introduces them to each other; it never sees the data. Merging (who wins when both changed) is in sync-core.js.
 (() => {
-  const Core = window.MurielSyncCore;
+  const Core = window.EclipseSyncCore || window.MurielSyncCore;
   if (!Core || !window.localStorage) return;
   // UI language (i18n.js); without it everything stays English
-  const I18n = window.MurielI18n || (() => { const f = (s, ...a) => String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? a[i] : '')); return { T: (s) => s, Tf: f, Tm: f, Th: f, text: (el, s, ...a) => { if (el) el.textContent = f(s, ...a); } }; })();
+  const I18n = window.EclipseI18n || window.MurielI18n || (() => { const f = (s, ...a) => String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? a[i] : '')); return { T: (s) => s, Tf: f, Tm: f, Th: f, text: (el, s, ...a) => { if (el) el.textContent = f(s, ...a); } }; })();
 
-  const LINK_PAGE = 'https://cloverscripts.github.io/riff-muriel/link.html';
+  const LINK_PAGE = 'https://eclipse-player.vercel.app/link.html';
   const DAY = 864e5;
   const LINK_TTL = 5 * 60e3;
   const KEEP_TOMBSTONES = 120 * DAY;
@@ -658,8 +658,10 @@
     if (window.showSettingsCategory) { const nav = document.getElementById('nav-settings'); if (nav) nav.click(); window.showSettingsCategory('sync'); }
     joinWithCode(m[1]);
   }
+  window.addEventListener('eclipse:deeplink', (e) => handleLink(e.detail));
   window.addEventListener('muriel:deeplink', (e) => handleLink(e.detail));
   // another language, or its words just came in: the sentences with names in them are built here
+  window.addEventListener('eclipse:i18n', () => { if (section || document.getElementById('section-sync-invite')) render(); });
   window.addEventListener('muriel:i18n', () => { if (section || document.getElementById('section-sync-invite')) render(); });
 
   // ---------- start ----------
@@ -692,7 +694,7 @@
   }
   if (window.MurielCore) hook(); else window.addEventListener('muriel:ready', hook, { once: true });
 
-  window.MurielSync = {
+  const syncApi = {
     // other devices' Encore data, for encore.js
     listenDbs: () => (catsOn().history ? Object.entries(listens).filter(([id]) => id !== device.id && members[id] && !members[id].del).map(([, e]) => e.db).filter(Boolean) : []),
     status: () => ({ device, group: !!group, members, connected: [...conns].filter(([, s]) => s.ok).map(([id]) => id) }),
@@ -702,4 +704,6 @@
     // before switching profiles (profiles.js): leaves the link service now instead of when the page goes
     stop: () => { stopLinking(); stopPeer(); },
   };
+  window.EclipseSync = syncApi;
+  window.MurielSync = syncApi;
 })();

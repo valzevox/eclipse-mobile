@@ -9825,7 +9825,9 @@ async function fetchAndApplyTranslation() {
     }
     return true;
   }
-  window.addEventListener('muriel:deeplink', (e) => { if (/^muriel:\/\/playlist/i.test(String(e.detail || ''))) importSharedPlaylist(e.detail); });
+  const onPlaylistDeeplink = (e) => { if (/^(?:eclipse|muriel):\/\/playlist/i.test(String(e.detail || ''))) importSharedPlaylist(e.detail); };
+  window.addEventListener('eclipse:deeplink', onPlaylistDeeplink);
+  window.addEventListener('muriel:deeplink', onPlaylistDeeplink);
 
   if (el.btnPlayPlaylist) el.btnPlayPlaylist.addEventListener('click', () => playOpenPlaylist(false));
   const btnShufflePlaylist = document.getElementById('btn-shuffle-playlist');
@@ -20762,7 +20764,7 @@ async function fetchAndApplyTranslation() {
 
   // ---- Core API for the iPhone interface (mobile/ui), which draws its own screens on this engine ----
   const savePlaylists = () => { localStorage.setItem('devsize_playlists', JSON.stringify(state.playlists)); renderPlaylistsList(); window.dispatchEvent(new Event('muriel:library')); };
-  window.MurielCore = {
+  window.EclipseCore = window.MurielCore = {
     state,
     audio: el.nativeAudio,
     base: () => `http://127.0.0.1:${state.serverPort}`,
@@ -20871,6 +20873,7 @@ async function fetchAndApplyTranslation() {
       if (keys.some((k) => k === 'devsize_playlists' || k === 'devsize_favorites')) window.dispatchEvent(new Event('muriel:library'));
     },
   };
+  window.dispatchEvent(new Event('eclipse:ready'));
   window.dispatchEvent(new Event('muriel:ready'));
 });
 

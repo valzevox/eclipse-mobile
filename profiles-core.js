@@ -172,6 +172,27 @@
       keys: () => { const out = []; for (let i = 0, n = native.length.call(ls); i < n; i++) out.push(native.key.call(ls, i)); return out; },
     };
     // fixed for the life of the page: what is saved on the way out (the queue, Encore) still lands in this profile
+  // Auto-migrate legacy Muriel keys to Eclipse namespace on first boot (transparent copy)
+  function autoMigrateMurielKeys(store) {
+    try {
+      const keys = store.keys ? store.keys() : [];
+      const mapping = [
+        ['muriel_profiles', 'eclipse_profiles'],
+        ['muriel_profile_active', 'eclipse_profile_active'],
+        ['muriel_sync_group', 'eclipse_sync_group'],
+        ['muriel_sync_device', 'eclipse_sync_device'],
+        ['muriel_lastfm_enabled', 'eclipse_lastfm_enabled'],
+        ['muriel_listens_v1', 'eclipse_listens_v1']
+      ];
+      mapping.forEach(([oldKey, newKey]) => {
+        const val = store.get(oldKey);
+        if (val != null && store.get(newKey) == null) {
+          store.set(newKey, val);
+        }
+      });
+    } catch (e) {}
+  }
+    autoMigrateMurielKeys(store);
     const id = activeId(store);
     const v = view(store, id);
     let proxy = null;
@@ -215,6 +236,7 @@
       isDevice,
       COLORS,
     };
+    win.EclipseProfiles = api;
     win.MurielProfiles = api;
     return api;
   }
