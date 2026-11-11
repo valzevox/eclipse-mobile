@@ -20893,7 +20893,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // --- ECLIPSE DONATE FEATURE ---
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  const CURRENT_MOB_VERSION = '1.0.36';
+  const CURRENT_MOB_VERSION = '1.0.46';
 
   function recordDonateUserAction(actionName) {
     try {
@@ -21180,8 +21180,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const now = Date.now();
       const elapsed = now - lastPrompt;
 
-      // Show if app updated OR if 1 week (7 days) has passed
-      if (isAppUpdated || elapsed >= SEVEN_DAYS_MS) {
+      // Only show donate popup after an app update (not on normal startup or weekly timer)
+      if (isAppUpdated) {
         localStorage.setItem('eclipse_last_seen_version', CURRENT_MOB_VERSION);
         localStorage.setItem('eclipse_donate_last_prompt', now.toString());
         if (dismissed === 'forever') {
