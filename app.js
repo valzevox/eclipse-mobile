@@ -20893,7 +20893,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // --- ECLIPSE DONATE FEATURE ---
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  const CURRENT_MOB_VERSION = '1.0.46';
+  const CURRENT_MOB_VERSION = '1.0.47';
 
   function recordDonateUserAction(actionName) {
     try {
@@ -21201,14 +21201,120 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
   }
 
+  async function checkMobileAppUpdate() {
+    try {
+      const res = await fetch('https://api.github.com/repos/valzevox/eclipse-mobile/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github+json' }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const latest = String(data.tag_name || '').replace(/^v/i, '').trim();
+      const cur = String(CURRENT_MOB_VERSION || '').replace(/^v/i, '').trim();
+      if (!latest || !cur) return;
+
+      const p1 = latest.split('.').map(n => parseInt(n, 10) || 0);
+      const p2 = cur.split('.').map(n => parseInt(n, 10) || 0);
+      let newer = false;
+      for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+        if ((p1[i] || 0) > (p2[i] || 0)) { newer = true; break; }
+        if ((p1[i] || 0) < (p2[i] || 0)) break;
+      }
+      if (!newer) return;
+
+      const skipped = localStorage.getItem('eclipse_mob_skip_ver');
+      if (skipped === latest) return;
+
+      // 1. Detect currently running package flavor to prevent Android package conflict
+      let flavor = localStorage.getItem('eclipse_installed_flavor') || '';
+      try {
+        const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (capApp && typeof capApp.getInfo === 'function') {
+          const info = await capApp.getInfo();
+          if (info && info.id) {
+            if (info.id === 'com.spotify.music' || info.id.includes('vivo')) {
+              flavor = 'vivo';
+            } else if (info.id.includes('eclipse') || info.id.includes('muriel')) {
+              flavor = 'standard';
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Fallback: check stored pattern or navigator if undetected
+      if (!flavor) {
+        const prevPattern = localStorage.getItem('eclipse_installed_asset_pattern');
+        if (prevPattern === 'vivo') {
+          flavor = 'vivo';
+        } else {
+          flavor = 'standard';
+        }
+      }
+      localStorage.setItem('eclipse_installed_flavor', flavor);
+
+      const isIOS = window.Capacitor && typeof window.Capacitor.getPlatform === 'function'
+        ? window.Capacitor.getPlatform() === 'ios'
+        : /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+      // 2. Select the EXACT matching asset from release assets to prevent package signature conflicts
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      let targetAsset = null;
+
+      if (isIOS) {
+        targetAsset = assets.find(a => a.name && a.name.endsWith('.ipa') && a.name.includes(latest))
+          || assets.find(a => a.name && a.name.endsWith('.ipa'));
+      } else if (flavor === 'vivo') {
+        // Vivo flavor strictly matches -vivo.apk
+        targetAsset = assets.find(a => a.name && a.name.endsWith('.apk') && a.name.toLowerCase().includes('vivo') && a.name.includes(latest))
+          || assets.find(a => a.name && a.name.endsWith('.apk') && a.name.toLowerCase().includes('vivo'));
+      } else {
+        // Standard flavor strictly excludes vivo.apk to prevent installation collision
+        targetAsset = assets.find(a => a.name && a.name.endsWith('.apk') && !a.name.toLowerCase().includes('vivo') && a.name.includes(latest))
+          || assets.find(a => a.name && a.name.endsWith('.apk') && !a.name.toLowerCase().includes('vivo'));
+      }
+
+      const downloadUrl = (targetAsset && targetAsset.browser_download_url)
+        ? targetAsset.browser_download_url
+        : (data.html_url || 'https://github.com/valzevox/eclipse-mobile/releases/latest');
+      const assetLabel = targetAsset ? targetAsset.name : (flavor === 'vivo' ? 'Vivo Live Island APK' : 'Standard APK');
+
+      if (typeof showToast === 'function') {
+        showToast(`Có bản cập nhật mới v${latest} (${assetLabel})!`, 'info');
+      }
+
+      const ok = window.confirm(
+        `Eclipse Mobile có bản cập nhật mới v${latest} (bản hiện tại: v${cur}).\n\n` +
+        `Gói tương thích tự động nhận diện: ${assetLabel}\n` +
+        `Hệ thống sẽ tải đúng gói cài đặt để tránh xung đột ứng dụng.\n\n` +
+        `Bạn có muốn tải và cập nhật ngay không?`
+      );
+
+      if (ok) {
+        localStorage.setItem('eclipse_installed_asset_pattern', flavor === 'vivo' ? 'vivo' : 'standard');
+        if (typeof openExternalLink === 'function') {
+          openExternalLink(downloadUrl);
+        } else {
+          window.open(downloadUrl, '_system') || window.open(downloadUrl, '_blank');
+        }
+      } else {
+        localStorage.setItem('eclipse_mob_skip_ver', latest);
+      }
+    } catch (e) {
+      console.warn('[updater] checkMobileAppUpdate failed:', e);
+    }
+  }
+
+  window.checkMobileAppUpdate = checkMobileAppUpdate;
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       initDonateFeature();
       checkMobileStartupDonatePrompt();
+      checkMobileAppUpdate();
     });
   } else {
     setTimeout(() => {
       initDonateFeature();
       checkMobileStartupDonatePrompt();
+      checkMobileAppUpdate();
     }, 100);
   }
