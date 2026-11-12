@@ -3748,7 +3748,6 @@ function crossfadeOnTrackChange() {
   }
 
   async function playTrack(track, queueList = null, startIndex = -1, context = null) {
-  try { checkDonatePromptMilestone(); } catch (_) {}
     if (!track || !el.nativeAudio) return;
     resetLevelWatcher();
     vizPrev = null;
