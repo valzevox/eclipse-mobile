@@ -1,6 +1,6 @@
 {
   "name": "eclipse-mobile",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "main": "main.js",
   "bin": {
     "eclipse": "./cli.js"
