@@ -1182,7 +1182,7 @@
             <div class="row-title">Local library</div>
             <div class="row-sub">Show the My files tab for music stored on your computer</div>
           </div>
-          <button class="sw on" role="switch" aria-checked="true" data-key="muriel_show_local"></button>
+          <button class="sw on" role="switch" aria-checked="true" data-key="eclipse_show_local"></button>
         </div>
 
         <div class="stacked-container stacked-3-middle row">
@@ -1194,7 +1194,7 @@
             <div class="row-sub" id="bgSub">Use your own image or video behind the app</div>
           </div>
           <button class="btn small secondary is-hidden" id="bgPickBtn">Choose file</button>
-          <button class="sw" role="switch" aria-checked="false" data-key="muriel_custom_bg_enabled"></button>
+          <button class="sw" role="switch" aria-checked="false" data-key="eclipse_custom_bg_enabled"></button>
         </div>
 
         <div class="stacked-container stacked-3-middle row">
@@ -1205,7 +1205,7 @@
             <div class="row-title">No-Hand cursor</div>
             <div class="row-sub">Keep the normal arrow instead of the hand on buttons</div>
           </div>
-          <button class="sw" role="switch" aria-checked="false" data-key="muriel_no_hand_cursor"></button>
+          <button class="sw" role="switch" aria-checked="false" data-key="eclipse_no_hand_cursor"></button>
         </div>
 
         <div class="stacked-container stacked-3-middle row">
@@ -1216,7 +1216,7 @@
             <div class="row-title">Performance mode</div>
             <div class="row-sub">Turn off blur and heavy animations on slower computers</div>
           </div>
-          <button class="sw" role="switch" aria-checked="false" data-key="muriel_perf_mode"></button>
+          <button class="sw" role="switch" aria-checked="false" data-key="eclipse_perf_mode"></button>
         </div>
 
         <div class="stacked-container stacked-3-bottom">
@@ -1880,8 +1880,8 @@
       toggles[key] = on;
       bridge.set(key, on ? '1' : '0');
 
-      if (key === 'muriel_no_hand_cursor') document.body.classList.toggle('no-hand-cursor', on);
-      if (key === 'muriel_custom_bg_enabled') bgPickBtn.classList.toggle('is-hidden', !on);
+      if (key === 'eclipse_no_hand_cursor') document.body.classList.toggle('no-hand-cursor', on);
+      if (key === 'eclipse_custom_bg_enabled') bgPickBtn.classList.toggle('is-hidden', !on);
     }
 
     document.querySelectorAll('.sw[data-key]').forEach((sw) => {
@@ -1897,7 +1897,7 @@
       const picked = await bridge.pickMedia();
       if (!picked) return;
       bgUrl = picked;
-      bridge.set('muriel_welcome_bg', bgUrl);
+      bridge.set('eclipse_welcome_bg', bgUrl);
       bgSub.textContent = bgDisplayName(bgUrl);
     });
 
@@ -2014,12 +2014,12 @@
         spotify: pendingImport
       };
 
-      bridge.set('muriel_welcome_theme', JSON.stringify(detail.theme));
-      bridge.set('muriel_welcome_done', '1');
+      bridge.set('eclipse_welcome_theme', JSON.stringify(detail.theme));
+      bridge.set('eclipse_welcome_done', '1');
 
       setTimeout(() => {
         viewport.classList.add('closing');
-        window.dispatchEvent(new CustomEvent('muriel:welcome-done', { detail }));
+        window.dispatchEvent(new CustomEvent('eclipse:welcome-done', { detail }));
         setTimeout(() => bridge.finish(detail), 500);
       }, 700);
     });

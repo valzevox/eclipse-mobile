@@ -13,11 +13,11 @@ function winShortcutPath() {
 }
 
 function linuxDesktopPath() {
-  return path.join(os.homedir(), '.local', 'share', 'applications', 'muriel.desktop');
+  return path.join(os.homedir(), '.local', 'share', 'applications', 'eclipse.desktop');
 }
 
 function linuxIconPath() {
-  return path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor', '512x512', 'apps', 'muriel.png');
+  return path.join(os.homedir(), '.local', 'share', 'icons', 'hicolor', '512x512', 'apps', 'eclipse.png');
 }
 
 function getLauncherInfo() {

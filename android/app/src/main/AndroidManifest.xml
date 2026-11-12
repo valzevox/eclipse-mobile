@@ -25,13 +25,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- muriel://link?code=… from the QR code in Settings → Sync (opens the app and links it) -->
+            <!-- eclipse://link?code=… from the QR code in Settings → Sync (opens the app and links it) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="eclipse" android:host="link" />
-                <!-- muriel://playlist?p=… from a shared playlist link (adds the playlist) -->
+                <!-- eclipse://playlist?p=… from a shared playlist link (adds the playlist) -->
                 <data android:scheme="eclipse" android:host="playlist" />
             </intent-filter>
 

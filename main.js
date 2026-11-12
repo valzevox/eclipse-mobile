@@ -27,7 +27,7 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   app.commandLine.appendSwitch('disable-features', 'Vulkan,AudioServiceOutOfProcess');
 
-  if (process.env.MURIEL_SKIP_GPU_BUFFER_FLAGS !== '1') {
+  if (process.env.ECLIPSE_SKIP_GPU_BUFFER_FLAGS !== '1') {
     app.commandLine.appendSwitch('disable-gpu-memory-buffer-video-frames');
     app.commandLine.appendSwitch('disable-gpu-memory-buffer-compositor-resources');
   }
@@ -57,14 +57,14 @@ app.commandLine.appendSwitch('js-flags', '--expose-gc');
 
 if (readStartupConfig().hwAccel === false) app.disableHardwareAcceleration();
 
-const extraFlags = (process.env.MURIEL_FLAGS || '').split(';').map((s) => s.trim()).filter(Boolean);
+const extraFlags = (process.env.ECLIPSE_FLAGS || '').split(';').map((s) => s.trim()).filter(Boolean);
 for (const flag of extraFlags) {
   const eq = flag.indexOf('=');
   if (eq > 0) app.commandLine.appendSwitch(flag.slice(0, eq), flag.slice(eq + 1));
   else app.commandLine.appendSwitch(flag);
 }
 
-if (process.env.MURIEL_DEBUG === '1') {
+if (process.env.ECLIPSE_DEBUG === '1') {
   app.whenReady().then(async () => {
     console.log('[gpu] features', JSON.stringify(app.getGPUFeatureStatus()));
     try {
@@ -77,10 +77,10 @@ if (process.env.MURIEL_DEBUG === '1') {
   });
 }
 
-// MURIEL_METRICS=1: one JSON line per interval with each Chromium process's CPU and memory, for measuring
-if (process.env.MURIEL_METRICS === '1') {
+// ECLIPSE_METRICS=1: one JSON line per interval with each Chromium process's CPU and memory, for measuring
+if (process.env.ECLIPSE_METRICS === '1') {
   app.whenReady().then(() => {
-    const every = Math.max(1000, parseInt(process.env.MURIEL_METRICS_MS || '5000', 10) || 5000);
+    const every = Math.max(1000, parseInt(process.env.ECLIPSE_METRICS_MS || '5000', 10) || 5000);
     setInterval(() => {
       const procs = app.getAppMetrics().map((m) => ({
         pid: m.pid,
@@ -236,7 +236,7 @@ function runGUI() {
                                    useContentSize: true,
                                    webPreferences: {
                                      preload: path.join(__dirname, 'preload.js'),
-                                   additionalArguments: [`--muriel-token=${getServerToken()}`],
+                                   additionalArguments: [`--eclipse-token=${getServerToken()}`],
                                    nodeIntegration: false,
                                    contextIsolation: true,
                                    webSecurity: false,
@@ -404,7 +404,7 @@ function runGUI() {
         if (content === null || content.length > 64 * 1024 * 1024) return { success: false, error: 'Nothing to save' };
         const isBackup = payload.kind === 'backup';
         const base = path.basename(String(payload.defaultName || '')).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '');
-        const name = base || (isBackup ? 'muriel-backup.json' : 'playlists.json');
+        const name = base || (isBackup ? 'eclipse-backup.json' : 'playlists.json');
         const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
         const r = await dialog.showSaveDialog(win, {
           title: isBackup ? 'Save a backup of this profile' : 'Export playlists',
@@ -503,7 +503,7 @@ function runGUI() {
         }
       }
 
-      // opts.folder: pick folders instead of files (from Riff 43.1); the files are copied into the library either way
+      // opts.folder: pick folders instead of files (from Eclipse 43.1); the files are copied into the library either way
       ipcMain.handle('import-audio-files', async (e, opts) => {
         const folder = !!(opts && opts.folder);
         const r = await dialog.showOpenDialog(mainWindow, folder
@@ -584,7 +584,7 @@ function runGUI() {
         // only Eclipse's own files move (and get deleted afterwards): the old folder may hold other things too
         if (move) {
           try {
-            await platform.copyDirContents(current, target, undefined, platform.MURIEL_DATA_ENTRIES);
+            await platform.copyDirContents(current, target, undefined, platform.ECLIPSE_DATA_ENTRIES);
           } catch (e) {
             return { ok: false, error: 'Could not move files: ' + e.message };
           }
@@ -594,7 +594,7 @@ function runGUI() {
         pickedDataDir = null;
 
         if (move) {
-          try { await platform.removeDirContents(current, undefined, platform.MURIEL_DATA_ENTRIES); } catch (e) {}
+          try { await platform.removeDirContents(current, undefined, platform.ECLIPSE_DATA_ENTRIES); } catch (e) {}
         }
 
         return { ok: true, dir: target, moved: move };
@@ -660,11 +660,11 @@ function runGUI() {
 
       const MEDIA_KEYS = { MediaPlayPause: 'toggle', MediaNextTrack: 'next', MediaPreviousTrack: 'prev', MediaStop: 'stop' };
       // off unless turned on in Settings: global shortcuts take the keys away from Chromium's media session, and
-      // with them the Windows overlay and lock screen controls (from Riff 43.1)
+      // with them the Windows overlay and lock screen controls (from Eclipse 43.1)
       let mediaKeysWanted = false;
       let mediaKeysActive = false;
       const sendMedia = (cmd) => {
-        if (process.env.MURIEL_DEBUG === '1') console.log('[media] globalShortcut', cmd);
+        if (process.env.ECLIPSE_DEBUG === '1') console.log('[media] globalShortcut', cmd);
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media-command', cmd);
       };
       function unregisterMediaKeys() {

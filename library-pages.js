@@ -1,4 +1,4 @@
-// Muriel's library pages, the parts that are plain data: saved albums, followed artists, the Daily Mixes of the
+// Eclipse's library pages, the parts that are plain data: saved albums, followed artists, the Daily Mixes of the
 // Spotify-style home and the thumbs up / down they get, and the explicit [E] badge. No DOM, no network: app.js
 // draws them, server.js marks explicit songs with the same check, test/library-pages.test.js runs this in Node.
 (function (root) {
@@ -178,7 +178,7 @@
     return isExplicitText(t.title) || isExplicitText(t.album);
   }
 
-  // ---------- blocked artists and songs (from Riff 43.1) ----------
+  // ---------- blocked artists and songs (from Eclipse 43.1) ----------
   // Never played on their own: skipped when the queue moves on and kept out of My Wave, the mixes and For you.
   // A blocked artist is a name ("Queen" also blocks "Queen & David Bowie"); a blocked song is its id, or its
   // title by the same artist (the same song from another upload).
@@ -223,5 +223,5 @@
     isArtistBlocked, isSongBlocked, isTrackBlocked, toggleBlockedArtist, toggleBlockedSong,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.MurielLibrary = api;
+  else root.EclipseLibrary = api;
 })(typeof window !== 'undefined' ? window : globalThis);

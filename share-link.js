@@ -1,6 +1,6 @@
 // Shared playlists: the whole playlist travels inside the link (after the #, so it never reaches a server).
 // https://eclipse-player.vercel.app/play/#p=<payload>        — opens the web player
-// eclipse://playlist?p=<payload>                              — opens the app (muriel:// kept for legacy compatibility)
+// eclipse://playlist?p=<payload>                              — opens the app (eclipse:// kept for legacy compatibility)
 // payload, when every song is on YouTube (the usual case): "y" + base64url(name length byte, name, then each
 // video id as its 8 bytes). Titles aren't in the link; fillInfo() looks them up from YouTube. That keeps a
 // 10-song link around 170 characters.
@@ -20,7 +20,7 @@
     return m ? m[1] : '';
   };
 
-  // a Muriel track -> a compact row, or null when it can't be shared
+  // a Eclipse track -> a compact row, or null when it can't be shared
   function packTrack(t) {
     if (!t || t.platform === 'local' || t.isLocal) return null;
     const meta = [clip(t.title, 140), clip(t.artist, 80), Math.max(0, Math.round(Number(t.duration) || 0))];
@@ -94,7 +94,7 @@
     return { payload, count: rows.length };
   }
 
-  // payload string -> { name, tracks } (throws on anything that isn't a Muriel playlist)
+  // payload string -> { name, tracks } (throws on anything that isn't a Eclipse playlist)
   async function decode(payload) {
     const p = String(payload || '').trim();
     if (p.length < 2 || p.length > 400000) throw new Error('not a playlist link');
@@ -121,7 +121,7 @@
     return { name: clip(data.n, 100) || 'Shared playlist', tracks };
   }
 
-  // the payload in a pasted link: the web player link or muriel://playlist?p=…
+  // the payload in a pasted link: the web player link or eclipse://playlist?p=…
   // (a bare payload isn't taken: "juicewrld" typed into the search bar looked like one)
   function payloadFrom(text) {
     const m = /[#?&]p=([yzj][A-Za-z0-9_-]+)/.exec(String(text || '').trim());
@@ -174,6 +174,6 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else {
     root.EclipseShare = api;
-    root.MurielShare = api;
+    root.EclipseShare = api;
   }
 })(typeof window !== 'undefined' ? window : globalThis);

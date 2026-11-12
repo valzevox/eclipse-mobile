@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  class MurielAudioEngine {
+  class EclipseAudioEngine {
     constructor() {
       this.ctx = null;
       this.mediaSource = null;
@@ -151,7 +151,7 @@
           this.hqAir.frequency.value = 9000;
 
           this.hqSaturation = this.ctx.createWaveShaper();
-          this.hqSaturation.oversample = '2x'; // 4x cost noticeably more CPU for no audible difference (Riff 43)
+          this.hqSaturation.oversample = '2x'; // 4x cost noticeably more CPU for no audible difference (Eclipse 43)
 
           this.hqLimiter = this.ctx.createDynamicsCompressor();
           this.hqLimiter.threshold.value = -1;
@@ -797,7 +797,7 @@
         }
       };
 
-      writeString(0, 'RIFF');
+      writeString(0, 'ECLIPSE');
       view.setUint32(4, totalSize - 8, true);
       writeString(8, 'WAVE');
 
@@ -826,6 +826,6 @@
     }
   }
 
-  global.MurielAudioEngine = MurielAudioEngine;
+  global.EclipseAudioEngine = EclipseAudioEngine;
 
 })(typeof window !== 'undefined' ? window : globalThis);

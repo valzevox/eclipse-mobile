@@ -68,7 +68,7 @@ module.exports = function electronAPI({ ready, port, fs, fileUrlFor }) {
       await ready;
       // lossless files take a while to copy; say so, or the app looks stuck
       const total = files.reduce((n, f) => n + f.size, 0);
-      if (total > 20e6 && window.MurielCore) window.MurielCore.toast(`Adding ${files.length} song${files.length === 1 ? '' : 's'}…`, 'info');
+      if (total > 20e6 && window.EclipseCore) window.EclipseCore.toast(`Adding ${files.length} song${files.length === 1 ? '' : 's'}…`, 'info');
       const out = [];
       for (const f of files) {
         const ext = extOf(f.name);
@@ -111,7 +111,7 @@ module.exports = function electronAPI({ ready, port, fs, fileUrlFor }) {
     setDownloadDir: async () => ({ success: false }),
     resetDownloadDir: async () => ({ success: true }),
     restartApp: () => location.reload(),
-    getAppVersion: async () => { const b = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {}; return b.version ? `${b.version}${b.run ? ` (build ${b.run})` : ''}` : '1.0.8'; },
+    getAppVersion: async () => { const b = window.ECLIPSE_BUILD || window.ECLIPSE_BUILD || {}; return b.version ? `${b.version}${b.run ? ` (build ${b.run})` : ''}` : '1.0.8'; },
     getHwAccel: async () => true,
     setHwAccel: noop,
     trimMemory: noop,

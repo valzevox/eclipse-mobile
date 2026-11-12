@@ -2,9 +2,9 @@
 // the app, test/backup-core.test.js in Node.
 // - Playlist files (JSON) are meant to be shared, so reading one trusts nothing: only plain text and numbers are
 //   kept, songs must point at YouTube or SoundCloud (or be a song from this device's library), pictures must be
-//   https, and everything is capped. The format is upstream Riff's, so either app reads the other's files.
-// - A backup is one profile's own localStorage keys. Restoring one only writes Muriel's data and settings keys:
-//   never the device's (profiles-core.js), the sync link, other profiles, logins or custom CSS. Riff's encrypted
+//   https, and everything is capped. The format is upstream Eclipse's, so either app reads the other's files.
+// - A backup is one profile's own localStorage keys. Restoring one only writes Eclipse's data and settings keys:
+//   never the device's (profiles-core.js), the sync link, other profiles, logins or custom CSS. Eclipse's encrypted
 //   account files (.rfacc) are read too: they are the same thing under a fixed, public key.
 (function (root) {
   const LIMITS = { fileBytes: 30e6, playlists: 2000, tracksPerPlaylist: 20000, tracks: 200000, keyBytes: 8e6, totalBytes: 24e6 };
@@ -38,7 +38,7 @@
     return d > 0 && d < 86400 ? Math.round(d) : 0;
   };
 
-  // A song from a shared playlist file -> a Muriel track, or null. A song with only a title and artist is kept
+  // A song from a shared playlist file -> a Eclipse track, or null. A song with only a title and artist is kept
   // with needsMatch: true; backup.js looks it up on YouTube, like a Spotify import.
   function cleanSharedTrack(t) {
     if (!isObj(t)) return null;
@@ -64,7 +64,7 @@
     return title ? { ...base, ...(thumb ? { thumbnail: thumb } : {}), needsMatch: true } : null;
   }
 
-  // the playlists in a playlist file (Muriel's, Riff's, or a bare list of songs); [] when there are none
+  // the playlists in a playlist file (Eclipse's, Eclipse's, or a bare list of songs); [] when there are none
   function parsePlaylistFile(text) {
     if (typeof text !== 'string' || !text.trim() || text.length > LIMITS.fileBytes) return [];
     let data;
@@ -97,7 +97,7 @@
     return out;
   }
 
-  // Muriel playlists -> a playlist file. Songs from this device's files keep only their library id (the file
+  // Eclipse playlists -> a playlist file. Songs from this device's files keep only their library id (the file
   // itself, its path and the local server's address stay here).
   function exportTrack(t) {
     if (!isObj(t)) return null;
@@ -134,12 +134,12 @@
   const fileName = (name, ext) => `${clip(name, 60).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/^\.+/, '') || 'eclipse'}.${ext}`;
 
   // ---------- backups ----------
-  const KEY_RE = /^(?:muriel|devsize)_[A-Za-z0-9_.:-]{1,80}$/;
+  const KEY_RE = /^(?:eclipse|devsize)_[A-Za-z0-9_.:-]{1,80}$/;
   // never written by a restore, never in a backup: the sync link (and which devices are in it), the profile list,
   // logins, phone logs, and things that only mean something on the device they were made on
-  // (a Riff file also carries its Last.fm login in plain text: Muriel keeps logins in the server's vault instead)
-  const NEVER = [/^muriel_sync_/, /^muriel_p:/, /^muriel_secret_/, /^muriel_profiles?(?:_|$)/, /^muriel_debug_log$/,
-    /^muriel_custom_css/, /^muriel_bg_(?:url|vpath)$/, /^muriel_banner_media$/, /^muriel_lastfm_(?!enabled$)/];
+  // (a Eclipse file also carries its Last.fm login in plain text: Eclipse keeps logins in the server's vault instead)
+  const NEVER = [/^eclipse_sync_/, /^eclipse_p:/, /^eclipse_secret_/, /^eclipse_profiles?(?:_|$)/, /^eclipse_debug_log$/,
+    /^eclipse_custom_css/, /^eclipse_bg_(?:url|vpath)$/, /^eclipse_banner_media$/, /^eclipse_lastfm_(?!enabled$)/];
   const neverKey = (k) => NEVER.some((re) => re.test(k));
   function backupKeyAllowed(key, isDevice) {
     if (typeof key !== 'string' || !KEY_RE.test(key) || neverKey(key)) return false;
@@ -156,7 +156,7 @@
     return { app: 'Eclipse', kind: 'eclipse-backup', version: 1, appVersion: String(appVersion || ''), exportedAt: new Date().toISOString(), profile: { name: clip(profileName, 24) }, data };
   }
 
-  // A stored track, as the app itself saves it. A restore keeps its own fields (text, numbers, true/false; Muriel
+  // A stored track, as the app itself saves it. A restore keeps its own fields (text, numbers, true/false; Eclipse
   // tracks are flat), drops anything else, and only lets through addresses a picture or song can come from.
   const URL_FIELDS = new Set(['url', 'thumbnail', 'cover', 'image', 'artworkUrl', 'localThumbnail']);
   function storedUrl(v) {
@@ -210,16 +210,16 @@
     devsize_history: (v) => cleanTrackList(v, 5000),
   };
 
-  // Upstream Riff's localStorage names: riff_x became muriel_x in Muriel (tools/rename-riff.py)
-  const fromRiff = (k) => (typeof k === 'string' && k.startsWith('riff_') ? `muriel_${k.slice(5)}` : k);
+  // Upstream Eclipse's localStorage names: eclipse_x became eclipse_x in Eclipse (tools/rename-riff.py)
+  const fromRiff = (k) => (typeof k === 'string' && k.startsWith('eclipse_') ? `eclipse_${k.slice(5)}` : k);
 
   // A backup file's contents (already parsed) -> what a restore writes. Throws an Error with a message for people.
   function readBackup(obj, { isDevice } = {}) {
     if (!isObj(obj)) throw new Error("That file isn't an Eclipse backup");
     let source = '';
     let raw = null;
-    if ((obj.kind === 'eclipse-backup' || obj.kind === 'muriel-backup') && isObj(obj.data)) { source = 'eclipse'; raw = obj.data; }
-    else if (isObj(obj.localStorage) && (obj.app === 'Eclipse' || obj.app === 'Riff' || obj.app === 'Muriel')) { source = 'riff'; raw = obj.localStorage; }
+    if ((obj.kind === 'eclipse-backup' || obj.kind === 'eclipse-backup') && isObj(obj.data)) { source = 'eclipse'; raw = obj.data; }
+    else if (isObj(obj.localStorage) && (obj.app === 'Eclipse' || obj.app === 'Eclipse' || obj.app === 'Eclipse')) { source = 'riff'; raw = obj.localStorage; }
     if (!raw) throw new Error("That file isn't an Eclipse backup or account file");
     const entries = {};
     const skipped = [];
@@ -246,14 +246,14 @@
       source,
       entries,
       skipped,
-      profileName: (source === 'eclipse' || source === 'muriel') && isObj(obj.profile) ? clip(obj.profile.name, 24) : '',
+      profileName: (source === 'eclipse' || source === 'eclipse') && isObj(obj.profile) ? clip(obj.profile.name, 24) : '',
       counts: { playlists: count('devsize_playlists'), favorites: count('devsize_favorites'), history: count('devsize_history'), keys: Object.keys(entries).length },
     };
   }
 
-  // ---------- Riff account files (.rfacc) ----------
-  // "RFAC", a 12-byte IV, a 16-byte GCM tag, then AES-256-GCM of deflate-raw(JSON) under sha256('riff-account-key-v1')
-  // (upstream main.js). The key is in Riff's source, so this is packaging, not protection.
+  // ---------- Eclipse account files (.rfacc) ----------
+  // "RFAC", a 12-byte IV, a 16-byte GCM tag, then AES-256-GCM of deflate-raw(JSON) under sha256('eclipse-account-key-v1')
+  // (upstream main.js). The key is in Eclipse's source, so this is packaging, not protection.
   const isRiffAccount = (bytes) => bytes && bytes.length > 32 && bytes[0] === 0x52 && bytes[1] === 0x46 && bytes[2] === 0x41 && bytes[3] === 0x43;
 
   async function inflateRaw(bytes, max) {
@@ -276,9 +276,9 @@
 
   async function readRiffAccount(bytes) {
     const subtle = typeof crypto !== 'undefined' && crypto.subtle;
-    if (!subtle || typeof DecompressionStream !== 'function') throw new Error("This device can't open Riff account files");
-    if (!isRiffAccount(bytes)) throw new Error("That file isn't a Riff account file");
-    const keyBytes = await subtle.digest('SHA-256', new TextEncoder().encode('riff-account-key-v1'));
+    if (!subtle || typeof DecompressionStream !== 'function') throw new Error("This device can't open Eclipse account files");
+    if (!isRiffAccount(bytes)) throw new Error("That file isn't a Eclipse account file");
+    const keyBytes = await subtle.digest('SHA-256', new TextEncoder().encode('eclipse-account-key-v1'));
     const key = await subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
     const iv = bytes.slice(4, 16);
     const tag = bytes.slice(16, 32);
@@ -287,9 +287,9 @@
     sealed.set(body);
     sealed.set(tag, body.length);
     let plain;
-    try { plain = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, sealed)); } catch (e) { throw new Error('That Riff account file is damaged'); }
+    try { plain = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, sealed)); } catch (e) { throw new Error('That Eclipse account file is damaged'); }
     const json = new TextDecoder().decode(await inflateRaw(plain, LIMITS.totalBytes * 2));
-    try { return JSON.parse(json); } catch (e) { throw new Error('That Riff account file is damaged'); }
+    try { return JSON.parse(json); } catch (e) { throw new Error('That Eclipse account file is damaged'); }
   }
 
   // bytes of a picked backup file -> its parsed contents
@@ -301,5 +301,5 @@
 
   const api = { LIMITS, cleanSharedTrack, parsePlaylistFile, exportTrack, playlistFile, fileName, backupKeyAllowed, keepOnRestore, makeBackup, cleanStoredTrack, cleanStoredPlaylists, readBackup, isRiffAccount, readRiffAccount, parseBackupFile };
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.MurielBackup = api;
+  else root.EclipseBackup = api;
 })(typeof window !== 'undefined' ? window : globalThis);

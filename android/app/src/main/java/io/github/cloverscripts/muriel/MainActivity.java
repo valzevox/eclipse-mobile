@@ -1,4 +1,4 @@
-package io.github.cloverscripts.muriel;
+package io.github.cloverscripts.eclipse;
 
 import android.os.Bundle;
 

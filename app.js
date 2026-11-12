@@ -1,19 +1,19 @@
 (() => {
   try {
-    if (typeof window === 'undefined' || window.__riffFetchPatched) return;
+    if (typeof window === 'undefined' || window.__eclipseFetchPatched) return;
     const api = window.electronAPI;
     const token = api && api.serverToken;
     if (!token) return;
     const origFetch = window.fetch ? window.fetch.bind(window) : null;
     if (!origFetch) return;
-    window.__riffFetchPatched = true;
+    window.__eclipseFetchPatched = true;
     window.fetch = function (input, init) {
       try {
         const raw = typeof input === 'string' ? input : (input && input.url) || '';
         if (raw.startsWith('http://127.0.0.1:') && new URL(raw).pathname.startsWith('/api/')) {
           const opts = Object.assign({}, init || {});
           const headers = new Headers(opts.headers || (input && input.headers) || undefined);
-          headers.set('X-Muriel-Token', token);
+          headers.set('X-Eclipse-Token', token);
           opts.headers = headers;
           return origFetch(input, opts);
         }
@@ -34,11 +34,11 @@
     Storage.prototype.setItem = function setItem(key, value) {
       try { return orig.call(this, key, value); } catch (e) {
         if (!e || (e.name !== 'QuotaExceededError' && e.code !== 22 && e.code !== 1014)) throw e;
-        try { if (key !== 'muriel_debug_log') this.removeItem('muriel_debug_log'); } catch (_) {}
-        try { if (key !== 'muriel_i18n_snap') this.removeItem('muriel_i18n_snap'); } catch (_) {}
-        try { if (window.MurielEncore && window.MurielEncore.compact) window.MurielEncore.compact(90); } catch (_) {}
+        try { if (key !== 'eclipse_debug_log') this.removeItem('eclipse_debug_log'); } catch (_) {}
+        try { if (key !== 'eclipse_i18n_snap') this.removeItem('eclipse_i18n_snap'); } catch (_) {}
+        try { if (window.EclipseEncore && window.EclipseEncore.compact) window.EclipseEncore.compact(90); } catch (_) {}
         try { return orig.call(this, key, value); } catch (e2) {
-          if (Date.now() - reportedAt > 60000) { reportedAt = Date.now(); window.dispatchEvent(new CustomEvent('muriel:storage-full', { detail: key })); }
+          if (Date.now() - reportedAt > 60000) { reportedAt = Date.now(); window.dispatchEvent(new CustomEvent('eclipse:storage-full', { detail: key })); }
         }
       }
     };
@@ -60,7 +60,7 @@
       window.electronAPI.logError(level, message, stack);
     }
   }
-  window.__riffLogError = reportError;
+  window.__eclipseLogError = reportError;
   window.addEventListener('error', (e) => {
     reportError('ERROR', e.message || String(e), e.error ? e.error.stack : null);
   });
@@ -75,8 +75,8 @@
 (function eclipseSplash() {
   const splash = document.getElementById('splash');
   if (!splash) return;
-  const perf = /^(1|true)$/.test(localStorage.getItem('muriel_perf_mode') || '');
-  const reduced = localStorage.getItem('muriel_adv_reduce_motion') === 'true' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const perf = /^(1|true)$/.test(localStorage.getItem('eclipse_perf_mode') || '');
+  const reduced = localStorage.getItem('eclipse_adv_reduce_motion') === 'true' || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   if (perf || reduced) { splash.remove(); return; }
   const finish = () => {
     if (!splash.isConnected || splash.classList.contains('hide')) return;
@@ -91,9 +91,9 @@
 })();
 
 document.addEventListener('DOMContentLoaded', async () => {
-  try { localStorage.removeItem('muriel_stats'); } catch (e) {}
+  try { localStorage.removeItem('eclipse_stats'); } catch (e) {}
 
-  const THUMB_FALLBACK = "if(window.murielArtNext){window.murielArtNext(this)}else if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full}else{this.style.visibility='hidden'}";
+  const THUMB_FALLBACK = "if(window.eclipseArtNext){window.eclipseArtNext(this)}else if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full}else{this.style.visibility='hidden'}";
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -190,12 +190,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // UI language (i18n.js): T('English') now, Tf('{0} songs', n) with values that are never translated,
   // Tm(...) for a toast or I18N.text(el, ...) that keep up when the translation comes in or the language changes.
   // Only literal strings go in: anything from the library or typed by someone goes into the {0} slots.
-  const I18N = window.MurielI18n || { T: (s) => s, Tf: (s, ...a) => String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? String(a[i]) : '')), lang: 'en', text: (el, s, ...a) => { if (el) el.textContent = String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? String(a[i]) : '')); }, ready: () => Promise.resolve(), connect() {}, setLang: async () => true, refresh() {} };
+  const I18N = window.EclipseI18n || { T: (s) => s, Tf: (s, ...a) => String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? String(a[i]) : '')), lang: 'en', text: (el, s, ...a) => { if (el) el.textContent = String(s).replace(/\{(\d)\}/g, (_, i) => (a[i] != null ? String(a[i]) : '')); }, ready: () => Promise.resolve(), connect() {}, setLang: async () => true, refresh() {} };
   if (!I18N.Tm) I18N.Tm = (s, ...a) => ({ i18n: String(s), args: a, toString() { return I18N.Tf(this.i18n, ...this.args); } });
   const T = (s) => I18N.T(s);
   const Tf = (s, ...args) => I18N.Tf(s, ...args);
   const Tm = (s, ...args) => I18N.Tm(s, ...args);
-  // what upstream Riff (and plugins written for it) call
+  // what upstream Eclipse (and plugins written for it) call
   window.t = T;
   window.applyI18n = (lang) => I18N.setLang(lang);
   // shown often but not on the page until then (a song's menu, everyday messages): asked for along with the page
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!container) return;
 
     // Prune excessive toasts if already at cap
-    const activeToasts = Array.from(container.querySelectorAll('.muriel-toast:not(.leaving)'));
+    const activeToasts = Array.from(container.querySelectorAll('.eclipse-toast:not(.leaving)'));
     if (activeToasts.length >= MAX_ACTIVE_TOASTS) {
       const oldest = activeToasts[0];
       if (oldest && typeof oldest._dismissToast === 'function') {
@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const toast = document.createElement('div');
-    toast.className = `muriel-toast ${type}${duration ? ' wide' : ''}`;
+    toast.className = `eclipse-toast ${type}${duration ? ' wide' : ''}`;
 
     let iconSvg = '';
     if (type === 'error') {
@@ -301,13 +301,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer(remaining);
   }
 
-  if (localStorage.getItem('muriel_scale_rebased_v2') !== '1') {
-    localStorage.setItem('muriel_scale_rebased_v2', '1');
+  if (localStorage.getItem('eclipse_scale_rebased_v2') !== '1') {
+    localStorage.setItem('eclipse_scale_rebased_v2', '1');
     if (localStorage.getItem('devsize_ui_scale') === '90') {
       localStorage.removeItem('devsize_ui_scale');
     }
-    if (localStorage.getItem('muriel_font_scale') === '95') {
-      localStorage.removeItem('muriel_font_scale');
+    if (localStorage.getItem('eclipse_font_scale') === '95') {
+      localStorage.removeItem('eclipse_font_scale');
     }
   }
 
@@ -415,13 +415,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const rawCustomPresets = safeArray('devsize_custom_presets');
   const normalizedCustomPresets = rawCustomPresets.map(normalizePreset).filter(Boolean);
 
-  const savedVolumeRaw = parseFloat(localStorage.getItem('muriel_volume'));
+  const savedVolumeRaw = parseFloat(localStorage.getItem('eclipse_volume'));
   const savedVolume = Number.isFinite(savedVolumeRaw) ? Math.max(0, Math.min(1, savedVolumeRaw)) : 0.85;
 
   const DEFAULT_AUDIO_SETTINGS = { speed: 1.0, speedPitch: 1.0, pitch: 0, reverb: 0, distortion: 0, volume: 1.0, echo: 0, eq: { low: 0, mid: 0, high: 0 }, eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
   const DEFAULT_HQ_SETTINGS = { engine: 'hqmusic-3', preset: 'studio', vocal: 0, air: 0, bass: 0 };
   // on unless switched off: speed, pitch and effects reset every launch was mistaken for a bug (issue #5)
-  let soundPersistenceEnabled = localStorage.getItem('muriel_persist_sound_settings') !== '0';
+  let soundPersistenceEnabled = localStorage.getItem('eclipse_persist_sound_settings') !== '0';
 
   function loadSoundSettings() {
     if (!soundPersistenceEnabled) {
@@ -431,8 +431,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         hqSettings: { ...DEFAULT_HQ_SETTINGS }
       };
     }
-    const savedAudio = safeJson('muriel_audio_settings', null);
-    const savedHq = safeJson('muriel_hq_settings', null);
+    const savedAudio = safeJson('eclipse_audio_settings', null);
+    const savedHq = safeJson('eclipse_hq_settings', null);
     const audioObj = savedAudio && typeof savedAudio === 'object' ? savedAudio : {};
     const hqObj = savedHq && typeof savedHq === 'object' ? savedHq : {};
     return {
@@ -442,7 +442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         eq: { ...DEFAULT_AUDIO_SETTINGS.eq, ...(audioObj.eq && typeof audioObj.eq === 'object' ? audioObj.eq : {}) },
         eqBands: Array.isArray(audioObj.eqBands) && audioObj.eqBands.length === 10 ? audioObj.eqBands.map(v => typeof v === 'number' ? v : 0) : [...DEFAULT_AUDIO_SETTINGS.eqBands]
       },
-      hqEnabled: localStorage.getItem('muriel_hq_enabled') === '1',
+      hqEnabled: localStorage.getItem('eclipse_hq_enabled') === '1',
       hqSettings: { ...DEFAULT_HQ_SETTINGS, ...hqObj }
     };
   }
@@ -462,9 +462,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function applyFont(font) {
-    const f = (typeof font === 'string' && font) ? font : (localStorage.getItem('muriel_font') || 'google');
+    const f = (typeof font === 'string' && font) ? font : (localStorage.getItem('eclipse_font') || 'google');
     if (typeof state !== 'undefined' && state) {
-      state.riffFont = f;
+      state.eclipseFont = f;
     }
     if (f === 'sf') {
       ensureSfFontLoaded();
@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const state = {
-    platform: localStorage.getItem('muriel_platform') || 'youtube',
+    platform: localStorage.getItem('eclipse_platform') || 'youtube',
     currentView: 'discover',
     previousView: 'discover',
     currentPlaylistId: null,
@@ -497,12 +497,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentTrackContext: null,
     currentTrackIndexInContext: -1,
     isPlaying: false,
-    isMuted: localStorage.getItem('muriel_muted') === '1',
+    isMuted: localStorage.getItem('eclipse_muted') === '1',
     volume: savedVolume,
     // repeat: 'off', 'all' (the queue starts over) or 'one' (the song plays again); isRepeat means 'one'
-    repeatMode: ({ '1': 'one', all: 'all' })[localStorage.getItem('muriel_repeat')] || 'off',
-    isRepeat: localStorage.getItem('muriel_repeat') === '1',
-    isShuffle: localStorage.getItem('muriel_shuffle') === '1',
+    repeatMode: ({ '1': 'one', all: 'all' })[localStorage.getItem('eclipse_repeat')] || 'off',
+    isRepeat: localStorage.getItem('eclipse_repeat') === '1',
+    isShuffle: localStorage.getItem('eclipse_shuffle') === '1',
     isAutoRemix: false,
     myWaveActive: false,
     _isNaturalEnding: false,
@@ -511,16 +511,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     drawerTab: 'now',
     lyricsMode: 'line',
     uiScale: savedScale,
-    activePresetId: soundPersistenceEnabled ? (localStorage.getItem('muriel_active_preset') || 'p_default') : 'p_default',
-    themeMode: localStorage.getItem('muriel_theme_mode') || 'dark',
-    paletteStyle: localStorage.getItem('muriel_palette_style') || 'classic',
-    meshBrightness: parseInt(localStorage.getItem('muriel_mesh_brightness') || '100', 10),
-    themeAccent: localStorage.getItem('muriel_theme_accent') || '#6750A4',
-    themeIntensity: parseInt(localStorage.getItem('muriel_theme_intensity') || '0'),
-    themeBrightness: parseInt(localStorage.getItem('muriel_theme_brightness') || '50'),
-    trEnabled: localStorage.getItem('muriel_tr_enabled') === 'true',
-    trLang: localStorage.getItem('muriel_tr_lang') || 'en',
-    trAuto: localStorage.getItem('muriel_tr_auto') === 'true',
+    activePresetId: soundPersistenceEnabled ? (localStorage.getItem('eclipse_active_preset') || 'p_default') : 'p_default',
+    themeMode: localStorage.getItem('eclipse_theme_mode') || 'dark',
+    paletteStyle: localStorage.getItem('eclipse_palette_style') || 'classic',
+    meshBrightness: parseInt(localStorage.getItem('eclipse_mesh_brightness') || '100', 10),
+    themeAccent: localStorage.getItem('eclipse_theme_accent') || '#6750A4',
+    themeIntensity: parseInt(localStorage.getItem('eclipse_theme_intensity') || '0'),
+    themeBrightness: parseInt(localStorage.getItem('eclipse_theme_brightness') || '50'),
+    trEnabled: localStorage.getItem('eclipse_tr_enabled') === 'true',
+    trLang: localStorage.getItem('eclipse_tr_lang') || 'en',
+    trAuto: localStorage.getItem('eclipse_tr_auto') === 'true',
     trActive: false,
     currentTranslations: null,
     romActive: false,
@@ -547,7 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                           lastBroadcastStateKey: null,
                           syncTimeout: null,
                           scrubberDragTargetTime: undefined,
-                          riffFont: localStorage.getItem('muriel_font') || 'google'
+                          eclipseFont: localStorage.getItem('eclipse_font') || 'google'
   };
 
   function migrateAddedAt() {
@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   migrateAddedAt();
 
-  applyFont(state.riffFont);
+  applyFont(state.eclipseFont);
 
   if (window.electronAPI && window.electronAPI.getServerPort) {
     try {
@@ -626,7 +626,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
     try {
       const audio = (state.secondaryAudio && !state.secondaryAudio.paused) ? state.secondaryAudio : el.nativeAudio;
-      const pos = window.MurielNowPlaying.positionState(audio, state.currentTrack && state.currentTrack.duration);
+      const pos = window.EclipseNowPlaying.positionState(audio, state.currentTrack && state.currentTrack.duration);
       if (pos) navigator.mediaSession.setPositionState(pos);
       else navigator.mediaSession.setPositionState();
     } catch (_) {}
@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let discordPresenceClearTimer = null;
   // off unless turned on in Settings (it tells everyone on Discord what you're listening to)
-  const discordPresenceOn = () => localStorage.getItem('muriel_discord_presence') === 'true';
+  const discordPresenceOn = () => localStorage.getItem('eclipse_discord_presence') === 'true';
   function updateDiscordPresence() {
     const api = window.electronAPI;
     if (!api) return;
@@ -782,16 +782,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function getAdv(name, defaultVal = true) {
-    const val = localStorage.getItem(`muriel_adv_${name}`);
+    const val = localStorage.getItem(`eclipse_adv_${name}`);
     if (val === null) return defaultVal;
     return val === 'true';
   }
 
   function setAdv(name, boolVal) {
-    localStorage.setItem(`muriel_adv_${name}`, boolVal ? 'true' : 'false');
+    localStorage.setItem(`eclipse_adv_${name}`, boolVal ? 'true' : 'false');
   }
 
-  // off or on as chosen in Settings; never chosen: the system's "Reduce motion" (from Riff 43.2)
+  // off or on as chosen in Settings; never chosen: the system's "Reduce motion" (from Eclipse 43.2)
   function systemPrefersReducedMotion() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
   }
@@ -871,7 +871,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const h = hsl.h;
     const intensityFactor = (typeof intensity === 'number' ? intensity : 100) / 100;
     const root = document.documentElement;
-    // Settings → "Apply intensity to background" (Riff 43): surfaces take on the accent as strongly as the
+    // Settings → "Apply intensity to background" (Eclipse 43): surfaces take on the accent as strongly as the
     // intensity slider says, instead of the faint tint they always have
     const tintSurfaces = getAdv('intensity_bg', false);
     const surfSat = (n, factor) => tintSurfaces ? Math.min(85, Math.round((hsl.s || 60) * factor * 2.4)) : Math.round(n * factor);
@@ -1456,12 +1456,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   function onEffectiveModeChanged(mode) {
     if (lastEffectiveMode === null || !document.getElementById('slider-ui-alpha')) {
       // first paint on a light theme with the default opacity: start solid
-      if (mode === 'light' && localStorage.getItem('muriel_ui_alpha') === null && document.getElementById('slider-ui-alpha')) {
-        localStorage.setItem('muriel_ui_alpha', '100');
+      if (mode === 'light' && localStorage.getItem('eclipse_ui_alpha') === null && document.getElementById('slider-ui-alpha')) {
+        localStorage.setItem('eclipse_ui_alpha', '100');
         document.documentElement.style.setProperty('--ui-alpha', '100%');
         document.getElementById('slider-ui-alpha').value = 100;
-        localStorage.setItem('muriel_ui_alpha_light_prev', '20');
-        localStorage.setItem('muriel_ui_alpha_light_auto', '100');
+        localStorage.setItem('eclipse_ui_alpha_light_prev', '20');
+        localStorage.setItem('eclipse_ui_alpha_light_auto', '100');
       }
       lastEffectiveMode = mode;
       return;
@@ -1470,15 +1470,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (mode === 'light') {
         const now = currentUiAlpha();
         if (now < 100) {
-          localStorage.setItem('muriel_ui_alpha_light_prev', String(now));
-          localStorage.setItem('muriel_ui_alpha_light_auto', '100');
+          localStorage.setItem('eclipse_ui_alpha_light_prev', String(now));
+          localStorage.setItem('eclipse_ui_alpha_light_auto', '100');
           setUiAlphaViaSlider(100);
         }
       } else if (lastEffectiveMode === 'light') {
-        const auto = localStorage.getItem('muriel_ui_alpha_light_auto'), prev = localStorage.getItem('muriel_ui_alpha_light_prev');
+        const auto = localStorage.getItem('eclipse_ui_alpha_light_auto'), prev = localStorage.getItem('eclipse_ui_alpha_light_prev');
         if (auto !== null && prev !== null && currentUiAlpha() === Number(auto)) setUiAlphaViaSlider(Number(prev));
-        localStorage.removeItem('muriel_ui_alpha_light_auto');
-        localStorage.removeItem('muriel_ui_alpha_light_prev');
+        localStorage.removeItem('eclipse_ui_alpha_light_auto');
+        localStorage.removeItem('eclipse_ui_alpha_light_prev');
       }
       lastEffectiveMode = mode;
     }
@@ -1867,13 +1867,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (el.sliderScale) el.sliderScale.value = state.uiScale;
   if (el.valScale) el.valScale.textContent = `${state.uiScale}%`;
 
-  const savedFontScale = localStorage.getItem('muriel_font_scale') || '100';
+  const savedFontScale = localStorage.getItem('eclipse_font_scale') || '100';
   const fontVal = parseInt(savedFontScale, 10) || 100;
   if (el.sliderFontScale) el.sliderFontScale.value = fontVal.toString();
   if (el.valFontScale) el.valFontScale.textContent = `${fontVal}%`;
   document.documentElement.style.setProperty('--font-scale', ((fontVal / 100) * 0.95 * 1.25).toString());
 
-  const savedRadius = localStorage.getItem('muriel_corner_radius') || '16';
+  const savedRadius = localStorage.getItem('eclipse_corner_radius') || '16';
   if (el.sliderCornerRadius) el.sliderCornerRadius.value = savedRadius;
   if (el.valCornerRadius) el.valCornerRadius.textContent = savedRadius === '16' ? 'Default' : `${savedRadius}px`;
   document.documentElement.style.setProperty('--md-shape-corner-l', `${savedRadius}px`);
@@ -1881,10 +1881,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   applyReducedMotionSetting();
 
-  const savedBannerBlur = parseInt(localStorage.getItem('muriel_banner_blur') || '3', 10);
-  const savedBannerOpacity = parseInt(localStorage.getItem('muriel_banner_opacity') || '100', 10);
-  const savedBannerFade = parseInt(localStorage.getItem('muriel_banner_fade') || '38', 10);
-  const savedBannerFit = localStorage.getItem('muriel_banner_fit') || 'zoom';
+  const savedBannerBlur = parseInt(localStorage.getItem('eclipse_banner_blur') || '3', 10);
+  const savedBannerOpacity = parseInt(localStorage.getItem('eclipse_banner_opacity') || '100', 10);
+  const savedBannerFade = parseInt(localStorage.getItem('eclipse_banner_fade') || '38', 10);
+  const savedBannerFit = localStorage.getItem('eclipse_banner_fit') || 'zoom';
 
   document.documentElement.style.setProperty('--banner-blur', `${savedBannerBlur}px`);
   document.documentElement.style.setProperty('--banner-opacity', `${savedBannerOpacity / 100}`);
@@ -1893,8 +1893,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   applyBannerFit(savedBannerFit);
 
   function applyUiOpacity() {
-    const rawUi = parseInt(localStorage.getItem('muriel_ui_alpha') || '20', 10);
-    const rawText = parseInt(localStorage.getItem('muriel_text_alpha') || '100', 10);
+    const rawUi = parseInt(localStorage.getItem('eclipse_ui_alpha') || '20', 10);
+    const rawText = parseInt(localStorage.getItem('eclipse_text_alpha') || '100', 10);
     const uiAlpha = Math.max(20, Math.min(100, isNaN(rawUi) ? 100 : rawUi));
     const textAlpha = Math.max(1, Math.min(100, isNaN(rawText) ? 100 : rawText));
 
@@ -2115,7 +2115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.addEventListener('click', swallow, true);
       setTimeout(() => document.removeEventListener('click', swallow, true), 400);
       const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: h.x, clientY: h.y });
-      ev.murielHold = true;
+      ev.eclipseHold = true;
       h.row.dispatchEvent(ev);
     };
     const move = (e) => {
@@ -2151,7 +2151,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.addEventListener('pointercancel', cancel, true);
     }, true);
     document.addEventListener('contextmenu', (e) => {
-      if (!hold || e.murielHold || !e.target.closest || !e.target.closest('.track-row')) return;
+      if (!hold || e.eclipseHold || !e.target.closest || !e.target.closest('.track-row')) return;
       hold.native = true;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -2211,7 +2211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  const audioEngine = new window.MurielAudioEngine();
+  const audioEngine = new window.EclipseAudioEngine();
   window.audioEngine = audioEngine;
   // Paused on a phone with the app in the background, the context is left running: a resume() there may not
   // settle until the app is opened again, so play from the lock screen or the notification stayed silent (#24)
@@ -2220,7 +2220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   animationFrameId = null;
 
   let levelAvgDb = -120;
-  function normalizeEnabled() { return localStorage.getItem('muriel_audio_normalize') === '1'; }
+  function normalizeEnabled() { return localStorage.getItem('eclipse_audio_normalize') === '1'; }
   function resetLevelWatcher() { levelAvgDb = -120; if (audioEngine && audioEngine.setNormalizeGainDb) audioEngine.setNormalizeGainDb(0); }
   // the phone app has no Web Audio graph (see mobile-ui.js), so nothing to measure there
   const isPhoneApp = document.documentElement.classList.contains('is-mobile');
@@ -2229,10 +2229,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   function nextPrefetchDue(cur, dur) {
     if (!(dur > 0) || !(cur >= 0)) return false;
     // the computer looks the next song up once this one has played 10 s (a quick skip costs nothing), so
-    // it starts at once (Riff 44); phones download whole songs, so they wait until halfway
+    // it starts at once (Eclipse 44); phones download whole songs, so they wait until halfway
     return isPhoneApp ? cur / dur > 0.5 : cur >= 10 || dur - cur <= 45;
   }
-  window.addEventListener('muriel:storage-full', () => showToast(Tm('Storage is full: some changes could not be saved'), 'error'));
+  window.addEventListener('eclipse:storage-full', () => showToast(Tm('Storage is full: some changes could not be saved'), 'error'));
   // <audio>/<img> can't send the token header the fetch wrapper adds, so local-server media URLs carry it
   const tokenUrl = (u) => {
     const t = window.electronAPI && window.electronAPI.serverToken;
@@ -2286,10 +2286,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     soundSettingsSaveTimer = setTimeout(() => {
       soundSettingsSaveTimer = null;
       try {
-        localStorage.setItem('muriel_hq_enabled', state.hqEnabled ? '1' : '0');
-        localStorage.setItem('muriel_hq_settings', JSON.stringify(state.hqSettings));
-        localStorage.setItem('muriel_audio_settings', JSON.stringify(state.audioSettings));
-        localStorage.setItem('muriel_active_preset', state.activePresetId || '');
+        localStorage.setItem('eclipse_hq_enabled', state.hqEnabled ? '1' : '0');
+        localStorage.setItem('eclipse_hq_settings', JSON.stringify(state.hqSettings));
+        localStorage.setItem('eclipse_audio_settings', JSON.stringify(state.audioSettings));
+        localStorage.setItem('eclipse_active_preset', state.activePresetId || '');
       } catch (e) {
         console.warn('Failed to save sound settings', e);
       }
@@ -2323,20 +2323,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   var trackAudioStore = null;
   var trackAudioOnlyDraft = false; // "For this track only" switched on, nothing changed yet
   var trackAudioLastKey = '';
-  function trackAudioLib() { return window.MurielTrackAudio || null; }
+  function trackAudioLib() { return window.EclipseTrackAudio || null; }
   function allTrackAudio() {
     if (!trackAudioStore) {
       const TA = trackAudioLib();
-      const raw = safeJson('muriel_track_audio', {});
+      const raw = safeJson('eclipse_track_audio', {});
       trackAudioStore = TA ? TA.cleanStore(raw) : {};
     }
     return trackAudioStore;
   }
   function saveAllTrackAudio() {
-    try { localStorage.setItem('muriel_track_audio', JSON.stringify(trackAudioStore || {})); } catch (e) { console.warn('Failed to save per-track audio', e); }
+    try { localStorage.setItem('eclipse_track_audio', JSON.stringify(trackAudioStore || {})); } catch (e) { console.warn('Failed to save per-track audio', e); }
   }
   function trackAudioKey(track) { return track ? (getTrackCanonicalId(track) || '') : ''; }
-  function ignoreTrackAudio() { try { return localStorage.getItem('muriel_ignore_track_audio') === '1'; } catch (e) { return false; } }
+  function ignoreTrackAudio() { try { return localStorage.getItem('eclipse_ignore_track_audio') === '1'; } catch (e) { return false; } }
   function currentTrackAudio() {
     const key = trackAudioKey(state.currentTrack);
     return key ? allTrackAudio()[key] || null : null;
@@ -2393,7 +2393,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   function customTempoPresets() {
     const TA = trackAudioLib();
-    return TA ? TA.cleanPresets(safeJson('muriel_tempo_presets', [])) : [];
+    return TA ? TA.cleanPresets(safeJson('eclipse_tempo_presets', [])) : [];
   }
   function renderTempoPresets() {
     const wrap = document.getElementById('tempo-preset-chips');
@@ -2427,7 +2427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         del.addEventListener('click', (e) => {
           e.stopPropagation();
           const list = customTempoPresets().filter(x => x.id !== p.id);
-          try { localStorage.setItem('muriel_tempo_presets', JSON.stringify(list)); } catch (err) {}
+          try { localStorage.setItem('eclipse_tempo_presets', JSON.stringify(list)); } catch (err) {}
           renderTempoPresets();
         });
         chip.appendChild(del);
@@ -2455,13 +2455,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderTrackAudioControls();
     });
     if (ign) ign.addEventListener('click', () => {
-      try { localStorage.setItem('muriel_ignore_track_audio', ignoreTrackAudio() ? '0' : '1'); } catch (e) {}
+      try { localStorage.setItem('eclipse_ignore_track_audio', ignoreTrackAudio() ? '0' : '1'); } catch (e) {}
       trackAudioOnlyDraft = false;
       applyAudioSettings();
       syncSettingsSlidersToState();
       renderTrackAudioControls();
     });
-    window.addEventListener('storage', (e) => { if (!e.key || /muriel_track_audio$/.test(e.key)) trackAudioStore = null; });
+    window.addEventListener('storage', (e) => { if (!e.key || /eclipse_track_audio$/.test(e.key)) trackAudioStore = null; });
 
     const saveBtn = document.getElementById('btn-save-tempo-preset');
     const nameInput = document.getElementById('tempo-preset-name');
@@ -2472,7 +2472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!p) { nameInput.focus(); return; }
       const list = customTempoPresets();
       list.push(p);
-      try { localStorage.setItem('muriel_tempo_presets', JSON.stringify(list)); } catch (e) {}
+      try { localStorage.setItem('eclipse_tempo_presets', JSON.stringify(list)); } catch (e) {}
       nameInput.value = '';
       showToast(Tm('Preset saved'), 'info');
       renderTempoPresets();
@@ -2490,14 +2490,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   let tvkSmoothedHeights = null;
   let vizPrev = null;
   function vizSettings() {
-    const smooth = Math.min(0.95, Math.max(0, (parseInt(localStorage.getItem('muriel_viz_smooth') || '70', 10)) / 100));
-    const sens = Math.min(3, Math.max(0.3, (parseInt(localStorage.getItem('muriel_viz_sens') || '100', 10)) / 100));
+    const smooth = Math.min(0.95, Math.max(0, (parseInt(localStorage.getItem('eclipse_viz_smooth') || '70', 10)) / 100));
+    const sens = Math.min(3, Math.max(0.3, (parseInt(localStorage.getItem('eclipse_viz_sens') || '100', 10)) / 100));
     return { smooth, sens };
   }
 
-  // ---- Riff 43: visualizer drawn wide behind the player bar, and the "connected" (one liquid wave) style ----
+  // ---- Eclipse 43: visualizer drawn wide behind the player bar, and the "connected" (one liquid wave) style ----
   // Same analyser and frame cap as the other visualizers; off in performance mode, and phones have no analyser.
-  var vizConnected = localStorage.getItem('muriel_viz_connected') === '1';
+  var vizConnected = localStorage.getItem('eclipse_viz_connected') === '1';
   function isVizConnectedMode() { return vizConnected; }
   let barBgSmoothed = null;
   let barBgW = 0;
@@ -2708,7 +2708,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       animationFrameId = requestAnimationFrame(renderLoop);
 
-      const fpsCap = document.body.classList.contains('perf') ? 30 : isPhoneApp ? 20 : (parseInt(localStorage.getItem('muriel_fps_cap') || '0', 10) || 0);
+      const fpsCap = document.body.classList.contains('perf') ? 30 : isPhoneApp ? 20 : (parseInt(localStorage.getItem('eclipse_fps_cap') || '0', 10) || 0);
       if (fpsCap && timestamp - lastFrameTime < 1000 / fpsCap - 1) return;
       lastFrameTime = timestamp;
 
@@ -2962,7 +2962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const centerY = sh / 2;
 
-        const showProgressBg = localStorage.getItem('muriel_progress_bg') !== 'false';
+        const showProgressBg = localStorage.getItem('eclipse_progress_bg') !== 'false';
         if (showProgressBg && inactiveEnd > inactiveStart) {
           sCtx.save();
           sCtx.globalAlpha = 0.3;
@@ -3238,7 +3238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function updateNowPlayingUI(track) {
-    window.dispatchEvent(new CustomEvent('muriel:track', { detail: track }));
+    window.dispatchEvent(new CustomEvent('eclipse:track', { detail: track }));
     if (el.playbarTitle) el.playbarTitle.textContent = track.title || 'Untitled';
     if (el.playbarTitle) el.playbarTitle.dataset.origTitle = track.title || '';
     if (el.playbarArtist) el.playbarArtist.textContent = track.artist || 'Unknown artist';
@@ -3323,7 +3323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const bannerImg = banner.querySelector('.banner-image') || banner;
     const trackArt = state.currentTrack ? getTrackArt(state.currentTrack) : {};
     const trackBanner = trackArt.banner || null;
-    const globalMedia = localStorage.getItem('muriel_banner_media');
+    const globalMedia = localStorage.getItem('eclipse_banner_media');
     const mediaToUse = trackBanner || globalMedia || thumbUrl;
     banner._pendingMedia = mediaToUse;
 
@@ -3420,7 +3420,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     banner.style.display = '';
     const bannerImg = banner.querySelector('.banner-image') || banner;
-    const globalMedia = localStorage.getItem('muriel_banner_media');
+    const globalMedia = localStorage.getItem('eclipse_banner_media');
     const mediaToUse = globalMedia || thumbUrl;
 
     if (!mediaToUse) {
@@ -3489,7 +3489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function getTrackArt(t) {
     try {
-      return JSON.parse(localStorage.getItem('muriel_track_art') || '{}')[getTrackCanonicalId(t)] || {};
+      return JSON.parse(localStorage.getItem('eclipse_track_art') || '{}')[getTrackCanonicalId(t)] || {};
     } catch (e) {
       return {};
     }
@@ -3498,14 +3498,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   function setTrackArt(t, patch) {
     let all = {};
     try {
-      all = JSON.parse(localStorage.getItem('muriel_track_art') || '{}');
+      all = JSON.parse(localStorage.getItem('eclipse_track_art') || '{}');
     } catch (e) {}
     const id = getTrackCanonicalId(t);
     if (!id) return;
     const cur = { ...(all[id] || {}), ...patch };
     for (const k in cur) if (!cur[k]) delete cur[k];
     if (Object.keys(cur).length) all[id] = cur; else delete all[id];
-    localStorage.setItem('muriel_track_art', JSON.stringify(all));
+    localStorage.setItem('eclipse_track_art', JSON.stringify(all));
   }
 
   let crossfadeTriggered = false;
@@ -3529,7 +3529,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // next song. Falls back to the plain fade-out when the song can't be opened twice (hls.js / blob sources),
   // and on iPhones, where a player's volume can't be changed (so neither song could fade).
   const xfade = { prep: null, tail: null, handingOver: false, fadeInRaf: 0 };
-  const crossfadeSeconds = () => parseInt(localStorage.getItem('muriel_crossfade') || '0', 10) || 0;
+  const crossfadeSeconds = () => parseInt(localStorage.getItem('eclipse_crossfade') || '0', 10) || 0;
   let volumeWorks = null;
   function elementVolumeWorks() {
     if (volumeWorks === null) {
@@ -3647,7 +3647,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (xfade.tail !== tail) { clearInterval(tail.loop); return; }
         const cur = t.currentTime || 0;
         if (t.ended || cur >= tail.end - 0.02) { stopCrossfadeTail(0); return; }
-        try { t.volume = tail.level * window.MurielTrim.fadeOutGain((cur - tail.point) / (tail.end - tail.point)); } catch (e) {}
+        try { t.volume = tail.level * window.EclipseTrim.fadeOutGain((cur - tail.point) / (tail.end - tail.point)); } catch (e) {}
       }, 40);
       crossfadeFadeInPending = true;
       xfade.handingOver = true;
@@ -3666,7 +3666,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     cancelAnimationFrame(xfade.fadeInRaf);
     const tick = () => {
       const p = (performance.now() - started) / (secs * 1000);
-      try { a.volume = p >= 1 ? 1 : window.MurielTrim.fadeInGain(p); } catch (e) {}
+      try { a.volume = p >= 1 ? 1 : window.EclipseTrim.fadeInGain(p); } catch (e) {}
       if (p < 1) xfade.fadeInRaf = requestAnimationFrame(tick);
     };
     // a timer, not only frames: a phone with the screen off draws none
@@ -3734,7 +3734,7 @@ function crossfadeOnTrackChange() {
   function setTrackLoading(on) {
     if (!!state.trackLoading === on) return;
     state.trackLoading = on;
-    window.dispatchEvent(new Event('muriel:loading'));
+    window.dispatchEvent(new Event('eclipse:loading'));
   }
   // every failure path asks this; a false answer means nothing else will be loaded, so loading is over
   function skipUnplayable(token, track) {
@@ -3943,8 +3943,8 @@ function crossfadeOnTrackChange() {
       hlsInstance.on(Hls.Events.ERROR, (evt, info) => {
         if (!info || !info.fatal || currentToken !== state.loadToken) return;
         const hls = hlsInstance;
-        if (info.type === Hls.ErrorTypes.MEDIA_ERROR && !hls._murielRecovered) {
-          hls._murielRecovered = true;
+        if (info.type === Hls.ErrorTypes.MEDIA_ERROR && !hls._eclipseRecovered) {
+          hls._eclipseRecovered = true;
           try { hls.recoverMediaError(); return; } catch (e) {}
         }
         try { hls.destroy(); } catch (e) {}
@@ -4010,7 +4010,7 @@ function crossfadeOnTrackChange() {
     const desc = err ? `${err.name || 'Error'}: ${err.message || String(err)}` : 'no details';
     const line = `${what}: ${desc} | ${describeMediaState(el.nativeAudio)} | load=${state.loadToken}`;
     console.warn(line);
-    try { if (window.__riffLogError) window.__riffLogError('WARN', line, null); } catch (e) {}
+    try { if (window.__eclipseLogError) window.__eclipseLogError('WARN', line, null); } catch (e) {}
     return line;
   }
   function retryFresh(token, track) {
@@ -4140,7 +4140,7 @@ function crossfadeOnTrackChange() {
     // the previous song's translations were shown under the new song's lines until its own translation loaded
     state.currentTranslations = null;
     // the iPhone lock screen / Dynamic Island lyrics (mobile/live-activity.js) follow state.syncedLyrics
-    window.dispatchEvent(new Event('muriel:lyrics'));
+    window.dispatchEvent(new Event('eclipse:lyrics'));
     renderMiniLyrics();
 
     try {
@@ -4182,7 +4182,7 @@ function crossfadeOnTrackChange() {
           const sec = parseFloat(match[2]);
           const raw = match[4].trim();
           // enhanced LRC: <mm:ss.xx> before each word gives that word its own time
-          const words = raw.includes('<') && window.MurielLyricsSources ? window.MurielLyricsSources.parseEnhancedLrcWords(raw, min * 60 + sec + 4) : null;
+          const words = raw.includes('<') && window.EclipseLyricsSources ? window.EclipseLyricsSources.parseEnhancedLrcWords(raw, min * 60 + sec + 4) : null;
           const text = words ? raw.replace(/<\d+:\d+(?:\.\d+)?>/g, '').replace(/\s+/g, ' ').trim() : raw;
           if (text) {
             parsed.push(words ? { time: min * 60 + sec, text, words } : { time: min * 60 + sec, text: text });
@@ -4207,7 +4207,7 @@ function crossfadeOnTrackChange() {
       }
 
       state.syncedLyrics = parsed;
-      window.dispatchEvent(new Event('muriel:lyrics'));
+      window.dispatchEvent(new Event('eclipse:lyrics'));
       if (options && options.engineName) {
         showToast('Đã tìm thấy lời từ ' + options.engineName, 'success');
       }
@@ -4251,7 +4251,7 @@ function crossfadeOnTrackChange() {
     }
   }
 
-  function getLyricsWordStyle() { return localStorage.getItem('muriel_lyrics_word_style') === 'words' ? 'words' : 'gradient'; }
+  function getLyricsWordStyle() { return localStorage.getItem('eclipse_lyrics_word_style') === 'words' ? 'words' : 'gradient'; }
   function isGradientMode() { return state.lyricsMode === 'word' && getAdv('karaoke_words', true) && getLyricsWordStyle() === 'gradient'; }
 
   function renderLyricsView() {
@@ -4573,7 +4573,7 @@ async function fetchAndApplyTranslation() {
       el.btnRomanizeLyrics.classList.remove('hidden');
       el.btnRomanizeLyrics.classList.toggle('active', !!state.romActive);
     }
-    const curProv = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
+    const curProv = localStorage.getItem('eclipse_lyrics_source') || 'lrclib';
     const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
     if (pill) {
       const provLabels = { custom: 'Custom', lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
@@ -4615,11 +4615,11 @@ async function fetchAndApplyTranslation() {
     linear: { css: 'linear', fn: (t) => t }
   };
   function getLyricsEase() {
-    const v = localStorage.getItem('muriel_lyrics_ease');
+    const v = localStorage.getItem('eclipse_lyrics_ease');
     return LYRIC_EASINGS[v] ? v : 'inout';
   }
   function getLyricsSpeed() {
-    const v = parseFloat(localStorage.getItem('muriel_lyrics_speed'));
+    const v = parseFloat(localStorage.getItem('eclipse_lyrics_speed'));
     return (v >= 0.5 && v <= 2.5) ? v : 1.0;
   }
   function applyLyricsEase() {
@@ -4629,7 +4629,7 @@ async function fetchAndApplyTranslation() {
     document.documentElement.style.setProperty('--lyric-duration', `${(0.45 / speed).toFixed(2)}s`);
   }
   function getLyricsGradientTightness() {
-    const v = parseInt(localStorage.getItem('muriel_lyrics_gradient_tightness') || localStorage.getItem('muriel_gradient_tight'), 10);
+    const v = parseInt(localStorage.getItem('eclipse_lyrics_gradient_tightness') || localStorage.getItem('eclipse_gradient_tight'), 10);
     return (v >= 0 && v <= 40) ? v : 2;
   }
   function applyLyricsGradientTightness() {
@@ -4732,7 +4732,7 @@ async function fetchAndApplyTranslation() {
     const text = fill.textContent || '';
     const cache = getLineGradientWeights(lineEl, idx, text);
     const timed = lineTimedWords(state.syncedLyrics[idx]);
-    const timedK = timed ? window.MurielLyricsSources.timedProgress(timed, t) : null;
+    const timedK = timed ? window.EclipseLyricsSources.timedProgress(timed, t) : null;
 
     let k = tau;
     if (timedK !== null) {
@@ -5044,7 +5044,7 @@ async function fetchAndApplyTranslation() {
       }
     }
 
-    // the song's own banner (Track art dialog), with its own blur / opacity / fade when it has them (Riff 43)
+    // the song's own banner (Track art dialog), with its own blur / opacity / fade when it has them (Eclipse 43)
     const songArt = state.currentTrack ? getTrackArt(state.currentTrack) : {};
     applyTrackBannerFx(songArt);
     if (bannerType === 'none' && songArt.banner) {
@@ -5052,8 +5052,8 @@ async function fetchAndApplyTranslation() {
       bannerSrc = songArt.banner;
     }
 
-    // no banner (they're gone in Muriel): use the custom background if there is one, else the cover
-    const customBg = localStorage.getItem('muriel_bg_url') || '';
+    // no banner (they're gone in Eclipse): use the custom background if there is one, else the cover
+    const customBg = localStorage.getItem('eclipse_bg_url') || '';
     if (bannerType === 'none' && customBg) {
       bannerType = /\.(mp4|webm)($|\?)/i.test(customBg) ? 'video' : 'img';
       bannerSrc = customBg;
@@ -5444,11 +5444,11 @@ async function fetchAndApplyTranslation() {
     if (state.currentTrack) toggleFavoriteTrack(state.currentTrack);
   });
 
-  // ---- Settings > Tracks > Output device (from Riff 43.1; computers) ----
+  // ---- Settings > Tracks > Output device (from Eclipse 43.1; computers) ----
   // The song plays through the Web Audio graph when it is set up and through the <audio> element before that,
   // so both get the device. A device that disappears while it plays (headphones unplugged) pauses the song
   // instead of letting it go on from the speakers.
-  const OUTPUT_DEVICE_KEY = 'muriel_audio_output_device';
+  const OUTPUT_DEVICE_KEY = 'eclipse_audio_output_device';
   const canPickOutput = !isPhoneApp && !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) && !!el.nativeAudio && typeof el.nativeAudio.setSinkId === 'function';
   let outputDeviceId = (() => { try { return localStorage.getItem(OUTPUT_DEVICE_KEY) || ''; } catch (e) { return ''; } })();
   let knownOutputIds = null;
@@ -5550,7 +5550,7 @@ async function fetchAndApplyTranslation() {
 
   function getTvk() {
     try {
-      const raw = localStorage.getItem('muriel_tvk');
+      const raw = localStorage.getItem('eclipse_tvk');
       if (raw) {
         const parsed = JSON.parse(raw);
         return {
@@ -5569,13 +5569,13 @@ async function fetchAndApplyTranslation() {
 
   function saveTvk(settings) {
     try {
-      localStorage.setItem('muriel_tvk', JSON.stringify(settings));
+      localStorage.setItem('eclipse_tvk', JSON.stringify(settings));
     } catch (_) {}
   }
 
   function updateTvkVisualizerSetting(enabled) {
     const on = enabled !== false && enabled !== 'false';
-    localStorage.setItem('muriel_tvk_visualizer', on ? 'true' : 'false');
+    localStorage.setItem('eclipse_tvk_visualizer', on ? 'true' : 'false');
     const tv = document.getElementById('tv-karaoke');
     if (tv) {
       tv.classList.toggle('no-tvk-visualizer', !on);
@@ -5592,7 +5592,7 @@ async function fetchAndApplyTranslation() {
 
   function updateTvkVisualizerLyricsSetting(enabled) {
     const on = enabled === true || enabled === 'true';
-    localStorage.setItem('muriel_tvk_visualizer_lyrics', on ? 'true' : 'false');
+    localStorage.setItem('eclipse_tvk_visualizer_lyrics', on ? 'true' : 'false');
     const tv = document.getElementById('tv-karaoke');
     if (tv) {
       tv.classList.toggle('tvk-show-lyrics-visualizer', on);
@@ -5611,7 +5611,7 @@ async function fetchAndApplyTranslation() {
     let val = parseInt(opacityVal, 10);
     if (isNaN(val)) val = 85;
     val = Math.max(10, Math.min(100, val));
-    localStorage.setItem('muriel_tvk_visualizer_opacity', val.toString());
+    localStorage.setItem('eclipse_tvk_visualizer_opacity', val.toString());
 
     const norm = (val / 100).toFixed(2);
     const tv = document.getElementById('tv-karaoke');
@@ -5653,11 +5653,11 @@ async function fetchAndApplyTranslation() {
     tv.setAttribute('data-tvk-anim', anim);
     tv.setAttribute('data-tvk-align', align);
 
-    const tvkVisOn = localStorage.getItem('muriel_tvk_visualizer') !== 'false';
+    const tvkVisOn = localStorage.getItem('eclipse_tvk_visualizer') !== 'false';
     tv.classList.toggle('no-tvk-visualizer', !tvkVisOn);
-    const tvkVisLyricsOn = localStorage.getItem('muriel_tvk_visualizer_lyrics') === 'true';
+    const tvkVisLyricsOn = localStorage.getItem('eclipse_tvk_visualizer_lyrics') === 'true';
     tv.classList.toggle('tvk-show-lyrics-visualizer', tvkVisLyricsOn);
-    const visOpacity = parseInt(localStorage.getItem('muriel_tvk_visualizer_opacity') || '85', 10);
+    const visOpacity = parseInt(localStorage.getItem('eclipse_tvk_visualizer_opacity') || '85', 10);
     tv.style.setProperty('--tvk-vis-opacity', (Math.max(10, Math.min(100, visOpacity)) / 100).toFixed(2));
   }
 
@@ -5721,19 +5721,19 @@ async function fetchAndApplyTranslation() {
     if (valGap) valGap.textContent = `${s.gap}px`;
     if (valSpeed) valSpeed.textContent = `${s.speed}ms`;
 
-    const tvkVisOn = localStorage.getItem('muriel_tvk_visualizer') !== 'false';
+    const tvkVisOn = localStorage.getItem('eclipse_tvk_visualizer') !== 'false';
     const btnTvkVis = document.getElementById('btn-tvk-visualizer');
     if (btnTvkVis) btnTvkVis.classList.toggle('active', tvkVisOn);
     const btnTvkVisSetting = document.getElementById('btn-tvk-visualizer-setting');
     if (btnTvkVisSetting) btnTvkVisSetting.classList.toggle('active', tvkVisOn);
 
-    const tvkVisLyricsOn = localStorage.getItem('muriel_tvk_visualizer_lyrics') === 'true';
+    const tvkVisLyricsOn = localStorage.getItem('eclipse_tvk_visualizer_lyrics') === 'true';
     const btnTvkVisLyrics = document.getElementById('btn-tvk-visualizer-lyrics');
     if (btnTvkVisLyrics) btnTvkVisLyrics.classList.toggle('active', tvkVisLyricsOn);
     const btnTvkVisLyricsSetting = document.getElementById('btn-tvk-visualizer-lyrics-setting');
     if (btnTvkVisLyricsSetting) btnTvkVisLyricsSetting.classList.toggle('active', tvkVisLyricsOn);
 
-    const visOpacity = parseInt(localStorage.getItem('muriel_tvk_visualizer_opacity') || '85', 10);
+    const visOpacity = parseInt(localStorage.getItem('eclipse_tvk_visualizer_opacity') || '85', 10);
     const sliderTvkVisOpacity = document.getElementById('tvk-vis-opacity');
     if (sliderTvkVisOpacity) sliderTvkVisOpacity.value = visOpacity;
     const valTvkVisOpacity = document.getElementById('val-tvk-vis-opacity');
@@ -5880,14 +5880,14 @@ async function fetchAndApplyTranslation() {
     const btnTvkVis = document.getElementById('btn-tvk-visualizer');
     if (btnTvkVis) {
       btnTvkVis.addEventListener('click', () => {
-        const cur = localStorage.getItem('muriel_tvk_visualizer') !== 'false';
+        const cur = localStorage.getItem('eclipse_tvk_visualizer') !== 'false';
         updateTvkVisualizerSetting(!cur);
       });
     }
     const btnTvkVisSetting = document.getElementById('btn-tvk-visualizer-setting');
     if (btnTvkVisSetting) {
       btnTvkVisSetting.addEventListener('click', () => {
-        const cur = localStorage.getItem('muriel_tvk_visualizer') !== 'false';
+        const cur = localStorage.getItem('eclipse_tvk_visualizer') !== 'false';
         updateTvkVisualizerSetting(!cur);
       });
     }
@@ -5895,14 +5895,14 @@ async function fetchAndApplyTranslation() {
     const btnTvkVisLyrics = document.getElementById('btn-tvk-visualizer-lyrics');
     if (btnTvkVisLyrics) {
       btnTvkVisLyrics.addEventListener('click', () => {
-        const cur = localStorage.getItem('muriel_tvk_visualizer_lyrics') === 'true';
+        const cur = localStorage.getItem('eclipse_tvk_visualizer_lyrics') === 'true';
         updateTvkVisualizerLyricsSetting(!cur);
       });
     }
     const btnTvkVisLyricsSetting = document.getElementById('btn-tvk-visualizer-lyrics-setting');
     if (btnTvkVisLyricsSetting) {
       btnTvkVisLyricsSetting.addEventListener('click', () => {
-        const cur = localStorage.getItem('muriel_tvk_visualizer_lyrics') === 'true';
+        const cur = localStorage.getItem('eclipse_tvk_visualizer_lyrics') === 'true';
         updateTvkVisualizerLyricsSetting(!cur);
       });
     }
@@ -5927,13 +5927,13 @@ async function fetchAndApplyTranslation() {
     const sliderVizSmooth = document.getElementById('slider-viz-smooth');
     const valVizSmooth = document.getElementById('val-viz-smooth');
     if (sliderVizSmooth) {
-      const saved = localStorage.getItem('muriel_viz_smooth');
+      const saved = localStorage.getItem('eclipse_viz_smooth');
       if (saved !== null) sliderVizSmooth.value = saved;
       if (valVizSmooth) valVizSmooth.textContent = `${sliderVizSmooth.value}%`;
       const onSmoothInput = (e) => {
         const v = e.target.value;
         if (valVizSmooth) valVizSmooth.textContent = `${v}%`;
-        localStorage.setItem('muriel_viz_smooth', v);
+        localStorage.setItem('eclipse_viz_smooth', v);
       };
       sliderVizSmooth.addEventListener('input', onSmoothInput);
       sliderVizSmooth.addEventListener('change', onSmoothInput);
@@ -5942,13 +5942,13 @@ async function fetchAndApplyTranslation() {
     const sliderVizSens = document.getElementById('slider-viz-sens');
     const valVizSens = document.getElementById('val-viz-sens');
     if (sliderVizSens) {
-      const saved = localStorage.getItem('muriel_viz_sens');
+      const saved = localStorage.getItem('eclipse_viz_sens');
       if (saved !== null) sliderVizSens.value = saved;
       if (valVizSens) valVizSens.textContent = `${sliderVizSens.value}%`;
       const onSensInput = (e) => {
         const v = e.target.value;
         if (valVizSens) valVizSens.textContent = `${v}%`;
-        localStorage.setItem('muriel_viz_sens', v);
+        localStorage.setItem('eclipse_viz_sens', v);
       };
       sliderVizSens.addEventListener('input', onSensInput);
       sliderVizSens.addEventListener('change', onSensInput);
@@ -6016,7 +6016,7 @@ async function fetchAndApplyTranslation() {
 
       showToast(text ? Tm('Lyrics saved successfully') : Tm('Lyrics removed'), 'info');
       closeCustomLyricsEditor();
-      localStorage.setItem('muriel_lyrics_source', 'custom');
+      localStorage.setItem('eclipse_lyrics_source', 'custom');
       const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
       if (pill) pill.textContent = 'Custom';
       const sourceLabel = document.getElementById('lyrics-source-label');
@@ -6177,7 +6177,7 @@ async function fetchAndApplyTranslation() {
 
       showToast(Tm('Synced lyrics saved'), 'info');
       closeSyncMode();
-      localStorage.setItem('muriel_lyrics_source', 'custom');
+      localStorage.setItem('eclipse_lyrics_source', 'custom');
       const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
       if (pill) pill.textContent = 'Custom';
       const sourceLabel = document.getElementById('lyrics-source-label');
@@ -6419,7 +6419,7 @@ async function fetchAndApplyTranslation() {
   }
 
   // Shuffle picks the next song while this one plays, so it can be downloaded in time: songs are fetched
-  // ahead, and a gap between songs could let iOS suspend Muriel with the screen locked.
+  // ahead, and a gap between songs could let iOS suspend Eclipse with the screen locked.
   function planShuffleNext() {
     const q = state.queue;
     if (q.length < 2) return null;
@@ -6564,7 +6564,7 @@ async function fetchAndApplyTranslation() {
     ['playing', 'pause', 'emptied'].forEach((ev) => el.nativeAudio.addEventListener(ev, clearStall));
 
     // A stream that stops delivering mid-song (an expired or throttled link) is looked up afresh after 12 s
-    // and continues where it stopped, instead of spinning forever (Riff 44)
+    // and continues where it stopped, instead of spinning forever (Eclipse 44)
     let stallTimer = null;
     function clearStall() { if (stallTimer) clearTimeout(stallTimer); stallTimer = null; }
     function watchStall() {
@@ -6780,15 +6780,15 @@ async function fetchAndApplyTranslation() {
       // With overlap (#29) the last X seconds move to a second player that plays them to the end while the next
       // song starts (prepareCrossfade); the song itself is never cut short.
       const X = crossfadeSeconds();
-      if (X > 0 && !crossfadeTriggered && !state.isRepeat && !el.nativeAudio.paused && audioEngine && !audioEngine.isLiveStream(el.nativeAudio) && window.MurielTrim) {
+      if (X > 0 && !crossfadeTriggered && !state.isRepeat && !el.nativeAudio.paused && audioEngine && !audioEngine.isLiveStream(el.nativeAudio) && window.EclipseTrim) {
         const trim = state.currentTrack ? getTrackTrim(state.currentTrack) : null;
-        const end = window.MurielTrim.isActive(trim) ? Math.min(trim.end, dur) : dur;
+        const end = window.EclipseTrim.isActive(trim) ? Math.min(trim.end, dur) : dur;
         const sleepAtEnd = state.sleepTimer && state.sleepTimer.mode === 'end';
-        const step = !sleepAtEnd && canOverlap(el.nativeAudio) && !queueFinished() ? window.MurielTrim.crossfadeStep(cur, end, X, el.nativeAudio.playbackRate) : null;
+        const step = !sleepAtEnd && canOverlap(el.nativeAudio) && !queueFinished() ? window.EclipseTrim.crossfadeStep(cur, end, X, el.nativeAudio.playbackRate) : null;
         if (step && !xfade.prep) {
-          prepareCrossfade(window.MurielTrim.crossfadePoint(end, X), end);
+          prepareCrossfade(window.EclipseTrim.crossfadePoint(end, X), end);
         } else if (!step && !xfade.prep) {
-          const fade = window.MurielTrim.endFadeSeconds(cur, end, X, el.nativeAudio.playbackRate);
+          const fade = window.EclipseTrim.endFadeSeconds(cur, end, X, el.nativeAudio.playbackRate);
           if (fade > 0) {
             crossfadeTriggered = true;
             audioEngine.fadeOut(fade);
@@ -6979,7 +6979,7 @@ async function fetchAndApplyTranslation() {
     initAudioContext();
     renderPresets();
     if (activeTweenRaf) { cancelAnimationFrame(activeTweenRaf); activeTweenRaf = null; }
-    if (localStorage.getItem('muriel_smooth_presets') === 'false') {
+    if (localStorage.getItem('eclipse_smooth_presets') === 'false') {
       state.audioSettings = { ...normalized.settings };
       syncSettingsSlidersToState();
       applyAudioSettings();
@@ -7262,10 +7262,10 @@ async function fetchAndApplyTranslation() {
   }
 
   // ---- saved albums: the heart on an album page and the Albums tab (Settings > Tracks > Show Albums tab) ----
-  // Kept in muriel_saved_albums, the same on every linked device (sync.js). library-pages.js decides what is
+  // Kept in eclipse_saved_albums, the same on every linked device (sync.js). library-pages.js decides what is
   // "the same album" and what a saved album keeps.
-  const Lib = window.MurielLibrary;
-  const SAVED_ALBUMS_KEY = 'muriel_saved_albums';
+  const Lib = window.EclipseLibrary;
+  const SAVED_ALBUMS_KEY = 'eclipse_saved_albums';
   const getSavedAlbums = () => safeArray(SAVED_ALBUMS_KEY);
   function setSavedAlbums(list) {
     try { localStorage.setItem(SAVED_ALBUMS_KEY, JSON.stringify(list)); } catch (e) {}
@@ -7293,7 +7293,7 @@ async function fetchAndApplyTranslation() {
   // the Albums tab and the heart only show when Settings > Tracks > Show Albums tab is on
   const btnShowAlbums = document.getElementById('btn-show-albums');
   function applyShowAlbums() {
-    const show = localStorage.getItem('muriel_show_albums') === '1';
+    const show = localStorage.getItem('eclipse_show_albums') === '1';
     document.body.classList.toggle('hide-albums-tab', !show);
     if (el.navAlbums) el.navAlbums.classList.toggle('nav-collapsed', !show);
     if (btnShowAlbums) btnShowAlbums.classList.toggle('active', show);
@@ -7303,7 +7303,7 @@ async function fetchAndApplyTranslation() {
   }
   if (btnShowAlbums) {
     btnShowAlbums.addEventListener('click', () => {
-      localStorage.setItem('muriel_show_albums', localStorage.getItem('muriel_show_albums') === '1' ? '0' : '1');
+      localStorage.setItem('eclipse_show_albums', localStorage.getItem('eclipse_show_albums') === '1' ? '0' : '1');
       applyShowAlbums();
     });
   }
@@ -7336,7 +7336,7 @@ async function fetchAndApplyTranslation() {
   // ---- Daily Mixes: thumbs up / down ("Do you like these songs?") on a mix's page ----
   // A liked mix makes its songs and artists count for more in My Wave and tomorrow's mixes; a disliked one keeps
   // what it brought in out of them (library-pages.js). Asked once per mix, and the mixes change every day.
-  const MIX_FEEDBACK_KEY = 'muriel_mix_feedback';
+  const MIX_FEEDBACK_KEY = 'eclipse_mix_feedback';
   const getMixFeedback = () => Lib.cleanFeedback(safeJson(MIX_FEEDBACK_KEY, null));
   function showAlbumExtras(album) {
     albumOnPage = album;
@@ -7743,7 +7743,7 @@ async function fetchAndApplyTranslation() {
   async function performSearch(query) {
     if (!query || !query.trim()) return;
     // a shared playlist link pasted into the search bar adds the playlist
-    if (window.MurielShare && window.MurielShare.payloadFrom(query)) {
+    if (window.EclipseShare && window.EclipseShare.payloadFrom(query)) {
       if (el.searchInput) { el.searchInput.value = ''; el.searchInput.blur(); }
       if (el.searchClearBtn) el.searchClearBtn.classList.add('hidden');
       importSharedPlaylist(query);
@@ -7798,7 +7798,7 @@ async function fetchAndApplyTranslation() {
         if (el.searchTracksList) renderTracks(el.searchTracksList, data.tracks, 'search');
       });
 
-      const showArtists = localStorage.getItem('muriel_search_artists') !== '0';
+      const showArtists = localStorage.getItem('eclipse_search_artists') !== '0';
       const trimmedQuery = query.trim();
       if (showArtists && trimmedQuery.length >= 3) {
         fetchArtistCardForSearch(trimmedQuery, searchToken, data.tracks);
@@ -7910,7 +7910,7 @@ async function fetchAndApplyTranslation() {
       const trackArtist = (track.artist || '').trim().toLowerCase();
       const showArtist = isAlbum ? (Boolean(trackArtist) && Boolean(albumArtist) && trackArtist !== albumArtist) : true;
       // [E] before the artist (Settings > Tracks > Show explicit tag hides it)
-      const explicitTag = window.MurielLibrary && window.MurielLibrary.isTrackExplicit(track) ? '<span class="explicit-badge" title="Explicit">E</span>' : '';
+      const explicitTag = window.EclipseLibrary && window.EclipseLibrary.isTrackExplicit(track) ? '<span class="explicit-badge" title="Explicit">E</span>' : '';
       const artistSpan = showArtist ? `<span class="track-row-artist" title="view artist profile" data-i18n-attr="title">${escapeHtml(track.artist || 'unknown artist')}</span>` : '';
 
       row.innerHTML = `
@@ -8097,11 +8097,11 @@ async function fetchAndApplyTranslation() {
     }
   }
 
-  // ---------- blocked artists and songs (from Riff 43.1; matching in library-pages.js) ----------
+  // ---------- blocked artists and songs (from Eclipse 43.1; matching in library-pages.js) ----------
   // Skipped when the queue moves on (a blocked song still plays when tapped), kept out of My Wave, the mixes and
   // For you. Per profile, and the same on linked devices (sync.js).
-  const BLOCKED_ARTISTS_KEY = 'muriel_blocked_artists';
-  const BLOCKED_SONGS_KEY = 'muriel_blocked_tracks';
+  const BLOCKED_ARTISTS_KEY = 'eclipse_blocked_artists';
+  const BLOCKED_SONGS_KEY = 'eclipse_blocked_tracks';
   // parsed again only when the stored text changed (a linked device or another profile wrote it)
   let blocksCache = null;
   function getBlocks() {
@@ -8581,7 +8581,7 @@ async function fetchAndApplyTranslation() {
   }
 
   // ---- following artists: "Your artists" on the home page, the same on every linked device (sync.js) ----
-  const FOLLOWED_ARTISTS_KEY = 'muriel_followed_artists';
+  const FOLLOWED_ARTISTS_KEY = 'eclipse_followed_artists';
   const getFollowedArtists = () => safeArray(FOLLOWED_ARTISTS_KEY);
   function setFollowedArtists(list) {
     try { localStorage.setItem(FOLLOWED_ARTISTS_KEY, JSON.stringify(list)); } catch (e) {}
@@ -8796,7 +8796,7 @@ async function fetchAndApplyTranslation() {
     if (el.favoritesCount) { el.favoritesCount.textContent = state.favorites.length; el.favoritesCount.hidden = !state.favorites.length; }
   }
 
-  const TRACK_SORT_KEYS = { favorites: 'muriel_favorites_sort', playlist: 'muriel_playlist_sort' };
+  const TRACK_SORT_KEYS = { favorites: 'eclipse_favorites_sort', playlist: 'eclipse_playlist_sort' };
 
   function getTrackSortMode(kind) {
     const stored = localStorage.getItem(TRACK_SORT_KEYS[kind]);
@@ -8891,7 +8891,7 @@ async function fetchAndApplyTranslation() {
 
   // Sorting the Albums tab, the playlists list and the Artists tab (#19); track-sort.js does the sorting.
   // Kept per view in localStorage. (var and function declarations: the lists can render before this line runs)
-  var LIBRARY_SORT_KEYS = { albums: 'muriel_albums_sort', playlists: 'muriel_playlists_sort', artists: 'muriel_artists_sort' };
+  var LIBRARY_SORT_KEYS = { albums: 'eclipse_albums_sort', playlists: 'eclipse_playlists_sort', artists: 'eclipse_artists_sort' };
   function getLibrarySort(kind) {
     let v = null;
     try { v = localStorage.getItem((LIBRARY_SORT_KEYS || {})[kind] || ''); } catch (e) {}
@@ -8920,7 +8920,7 @@ async function fetchAndApplyTranslation() {
 
   let queueRerender = 0;
   function updateQueueBadge() {
-    window.dispatchEvent(new Event('muriel:queue'));
+    window.dispatchEvent(new Event('eclipse:queue'));
     if (el.queueCount) { el.queueCount.textContent = state.queue.length; el.queueCount.style.display = state.queue.length ? 'inline-block' : 'none'; }
     scheduleQueueSave();
     // an open queue list kept showing the old order after Play next / Add to queue
@@ -9198,7 +9198,7 @@ async function fetchAndApplyTranslation() {
     img.src = next;
     return true;
   }
-  window.murielArtNext = nextTrackArt;
+  window.eclipseArtNext = nextTrackArt;
 
   // Old saves: give YouTube songs without a cover the one derived from their id (no network), once, when idle.
   function backfillTrackArt() {
@@ -9773,9 +9773,9 @@ async function fetchAndApplyTranslation() {
     const i = shuffle ? Math.floor(Math.random() * list.length) : 0;
     playTrack(list[i], list, i, 'playlist');
   }
-  // Share: the playlist goes inside a link (share-link.js) that opens in the web player or in Muriel
+  // Share: the playlist goes inside a link (share-link.js) that opens in the web player or in Eclipse
   async function sharePlaylist(pl) {
-    const S = window.MurielShare;
+    const S = window.EclipseShare;
     if (!pl || !S) return;
     let link, count;
     try { const r = await S.encode({ name: pl.name, tracks: pl.tracks || [] }); link = S.webLink(r.payload); count = r.count; } catch (e) { showToast(Tm("Couldn't make a link for this playlist"), 'error'); return; }
@@ -9797,10 +9797,10 @@ async function fetchAndApplyTranslation() {
   const btnSharePlaylist = document.getElementById('btn-share-playlist');
   if (btnSharePlaylist) btnSharePlaylist.addEventListener('click', () => sharePlaylist(state.playlists.find(p => p.id === state.currentPlaylistId)));
 
-  // a playlist someone shared: from a muriel://playlist link, the search bar or the link importer
+  // a playlist someone shared: from a eclipse://playlist link, the search bar or the link importer
   let importingShare = '';
   async function importSharedPlaylist(text) {
-    const S = window.MurielShare;
+    const S = window.EclipseShare;
     const payload = S ? S.payloadFrom(text) : '';
     if (!payload) return false;
     if (importingShare === payload) return true;
@@ -9825,9 +9825,9 @@ async function fetchAndApplyTranslation() {
     }
     return true;
   }
-  const onPlaylistDeeplink = (e) => { if (/^(?:eclipse|muriel):\/\/playlist/i.test(String(e.detail || ''))) importSharedPlaylist(e.detail); };
+  const onPlaylistDeeplink = (e) => { if (/^(?:eclipse|eclipse):\/\/playlist/i.test(String(e.detail || ''))) importSharedPlaylist(e.detail); };
   window.addEventListener('eclipse:deeplink', onPlaylistDeeplink);
-  window.addEventListener('muriel:deeplink', onPlaylistDeeplink);
+  window.addEventListener('eclipse:deeplink', onPlaylistDeeplink);
 
   if (el.btnPlayPlaylist) el.btnPlayPlaylist.addEventListener('click', () => playOpenPlaylist(false));
   const btnShufflePlaylist = document.getElementById('btn-shuffle-playlist');
@@ -10584,7 +10584,7 @@ async function fetchAndApplyTranslation() {
     const panel = el.rightPanel || document.getElementById('right-panel');
     if (!edge || !panel) return;
 
-    const savedWidth = localStorage.getItem('muriel_right_panel_width');
+    const savedWidth = localStorage.getItem('eclipse_right_panel_width');
     if (savedWidth) {
       const w = parseInt(savedWidth, 10);
       if (w >= 260 && w <= 720) {
@@ -10634,7 +10634,7 @@ async function fetchAndApplyTranslation() {
         raf = 0;
       }
       if (pendingW >= 260 && pendingW <= 720) {
-        localStorage.setItem('muriel_right_panel_width', pendingW.toString());
+        localStorage.setItem('eclipse_right_panel_width', pendingW.toString());
       }
       if (typeof resizeCanvases === 'function') resizeCanvases();
     };
@@ -10645,7 +10645,7 @@ async function fetchAndApplyTranslation() {
     edge.addEventListener('dblclick', () => {
       panel.style.width = '340px';
       panel.style.setProperty('--right-panel-width', '340px');
-      localStorage.setItem('muriel_right_panel_width', '340px');
+      localStorage.setItem('eclipse_right_panel_width', '340px');
       if (typeof resizeCanvases === 'function') resizeCanvases();
     });
   })();
@@ -10653,7 +10653,7 @@ async function fetchAndApplyTranslation() {
   if (el.searchInput) {
     el.searchInput.addEventListener('input', (e) => {
       const val = e.target.value;
-      if (window.MurielShare && window.MurielShare.payloadFrom(val)) { performSearch(val); return; }
+      if (window.EclipseShare && window.EclipseShare.payloadFrom(val)) { performSearch(val); return; }
       if (val && el.searchClearBtn) {
         el.searchClearBtn.classList.remove('hidden');
       } else if (el.searchClearBtn) {
@@ -10707,7 +10707,7 @@ async function fetchAndApplyTranslation() {
   function setPlatform(platform, triggerSearch = true) {
     if (!['youtube', 'ytmusic', 'soundcloud'].includes(platform)) platform = 'youtube';
     state.platform = platform;
-    localStorage.setItem('muriel_platform', platform);
+    localStorage.setItem('eclipse_platform', platform);
 
     if (el.platformYt) el.platformYt.classList.toggle('active', platform === 'youtube');
     if (el.platformYtm) el.platformYtm.classList.toggle('active', platform === 'ytmusic');
@@ -10730,7 +10730,7 @@ async function fetchAndApplyTranslation() {
     }
   }
 
-  const savedPlatform = localStorage.getItem('muriel_platform') || 'youtube';
+  const savedPlatform = localStorage.getItem('eclipse_platform') || 'youtube';
   setPlatform(savedPlatform, false);
 
   if (el.platformYt) el.platformYt.addEventListener('click', () => setPlatform('youtube'));
@@ -10778,7 +10778,7 @@ async function fetchAndApplyTranslation() {
   }
 
   const btnCompactEngineBtns = document.getElementById('btn-compact-engine-btns');
-  const isCompactEngine = localStorage.getItem('muriel_compact_engine_btns') === '1';
+  const isCompactEngine = localStorage.getItem('eclipse_compact_engine_btns') === '1';
   document.body.classList.toggle('compact-engine-btns', isCompactEngine);
   if (btnCompactEngineBtns) {
     btnCompactEngineBtns.classList.toggle('active', isCompactEngine);
@@ -10786,14 +10786,14 @@ async function fetchAndApplyTranslation() {
       const next = !btnCompactEngineBtns.classList.contains('active');
       btnCompactEngineBtns.classList.toggle('active', next);
       document.body.classList.toggle('compact-engine-btns', next);
-      localStorage.setItem('muriel_compact_engine_btns', next ? '1' : '0');
+      localStorage.setItem('eclipse_compact_engine_btns', next ? '1' : '0');
       updateEngineWidthVar();
       setTimeout(updateEngineWidthVar, 350);
     });
   }
 
   const btnHideEngineBtns = document.getElementById('btn-hide-engine-btns');
-  const isHideEngine = localStorage.getItem('muriel_hide_engine_btns') === '1';
+  const isHideEngine = localStorage.getItem('eclipse_hide_engine_btns') === '1';
   document.body.classList.toggle('hide-engine-btns', isHideEngine);
   if (btnHideEngineBtns) {
     btnHideEngineBtns.classList.toggle('active', isHideEngine);
@@ -10801,7 +10801,7 @@ async function fetchAndApplyTranslation() {
       const next = !btnHideEngineBtns.classList.contains('active');
       btnHideEngineBtns.classList.toggle('active', next);
       document.body.classList.toggle('hide-engine-btns', next);
-      localStorage.setItem('muriel_hide_engine_btns', next ? '1' : '0');
+      localStorage.setItem('eclipse_hide_engine_btns', next ? '1' : '0');
       updateEngineWidthVar();
       setTimeout(updateEngineWidthVar, 350);
     });
@@ -10814,7 +10814,7 @@ async function fetchAndApplyTranslation() {
       const next = !btnPersistSound.classList.contains('active');
       btnPersistSound.classList.toggle('active', next);
       soundPersistenceEnabled = next;
-      localStorage.setItem('muriel_persist_sound_settings', next ? '1' : '0');
+      localStorage.setItem('eclipse_persist_sound_settings', next ? '1' : '0');
       if (next) persistSoundSettings();
     });
   }
@@ -10825,13 +10825,13 @@ async function fetchAndApplyTranslation() {
 
   function setShuffle(on) {
     state.isShuffle = !!on;
-    localStorage.setItem('muriel_shuffle', state.isShuffle ? '1' : '0');
+    localStorage.setItem('eclipse_shuffle', state.isShuffle ? '1' : '0');
     if (el.btnShuffle) el.btnShuffle.classList.toggle('active', state.isShuffle);
     if (el.btnTvkShuffle) {
       el.btnTvkShuffle.classList.toggle('active', state.isShuffle);
       el.btnTvkShuffle.setAttribute('aria-pressed', String(state.isShuffle));
     }
-    window.dispatchEvent(new Event('muriel:modes')); // the phone's lock-screen / Dynamic Island buttons follow
+    window.dispatchEvent(new Event('eclipse:modes')); // the phone's lock-screen / Dynamic Island buttons follow
   }
   if (el.btnShuffle) {
     el.btnShuffle.classList.toggle('active', state.isShuffle);
@@ -10848,7 +10848,7 @@ async function fetchAndApplyTranslation() {
   function setRepeatMode(mode) {
     state.repeatMode = REPEAT_TITLES[mode] ? mode : 'off';
     state.isRepeat = state.repeatMode === 'one';
-    localStorage.setItem('muriel_repeat', ({ off: '0', all: 'all', one: '1' })[state.repeatMode]);
+    localStorage.setItem('eclipse_repeat', ({ off: '0', all: 'all', one: '1' })[state.repeatMode]);
     if (el.btnRepeat) {
       el.btnRepeat.classList.toggle('active', state.repeatMode !== 'off');
       el.btnRepeat.classList.toggle('repeat-one', state.isRepeat);
@@ -10862,7 +10862,7 @@ async function fetchAndApplyTranslation() {
       el.btnTvkRepeat.setAttribute('aria-label', T(REPEAT_TITLES[state.repeatMode]));
       el.btnTvkRepeat.setAttribute('aria-pressed', String(state.repeatMode !== 'off'));
     }
-    window.dispatchEvent(new Event('muriel:modes'));
+    window.dispatchEvent(new Event('eclipse:modes'));
   }
   setRepeatMode(state.repeatMode);
   if (el.btnRepeat) {
@@ -10877,8 +10877,8 @@ async function fetchAndApplyTranslation() {
 
   function persistVolumeState() {
     try {
-      localStorage.setItem('muriel_volume', String(state.volume));
-      localStorage.setItem('muriel_muted', state.isMuted ? '1' : '0');
+      localStorage.setItem('eclipse_volume', String(state.volume));
+      localStorage.setItem('eclipse_muted', state.isMuted ? '1' : '0');
     } catch (e) {}
   }
 
@@ -11383,7 +11383,7 @@ async function fetchAndApplyTranslation() {
     el.themeModeBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         state.themeMode = btn.dataset.themeMode;
-        localStorage.setItem('muriel_theme_mode', state.themeMode);
+        localStorage.setItem('eclipse_theme_mode', state.themeMode);
         updateThemeFromState();
       });
     });
@@ -11393,11 +11393,11 @@ async function fetchAndApplyTranslation() {
     el.themeSwatches.forEach(sw => {
       sw.addEventListener('click', () => {
         state.themeAccent = sw.dataset.color;
-        localStorage.setItem('muriel_theme_accent', state.themeAccent);
+        localStorage.setItem('eclipse_theme_accent', state.themeAccent);
         if (state.themeMode === 'auto') {
           const targetMode = currentEffectiveMode || 'dark';
           state.themeMode = targetMode;
-          localStorage.setItem('muriel_theme_mode', targetMode);
+          localStorage.setItem('eclipse_theme_mode', targetMode);
         }
         updateThemeFromState();
       });
@@ -11405,15 +11405,15 @@ async function fetchAndApplyTranslation() {
   }
 
   if (el.customColorInput) {
-    // on change too, not only input: some color pickers send only change, so the color was never saved (Riff 43.1)
+    // on change too, not only input: some color pickers send only change, so the color was never saved (Eclipse 43.1)
     const applyCustomAccent = (e) => {
       if (!/^#[0-9a-f]{6}$/i.test(e.target.value || '')) return;
       state.themeAccent = e.target.value.toLowerCase();
-      localStorage.setItem('muriel_theme_accent', state.themeAccent);
+      localStorage.setItem('eclipse_theme_accent', state.themeAccent);
       if (state.themeMode === 'auto') {
         const targetMode = currentEffectiveMode || 'dark';
         state.themeMode = targetMode;
-        localStorage.setItem('muriel_theme_mode', targetMode);
+        localStorage.setItem('eclipse_theme_mode', targetMode);
       }
       updateThemeFromState();
       if (el.themeSwatches) el.themeSwatches.forEach(sw => sw.classList.remove('active'));
@@ -11432,11 +11432,11 @@ async function fetchAndApplyTranslation() {
       const h = parseInt(e.target.value, 10);
       if (el.valHue) el.valHue.textContent = h + '°';
       state.themeAccent = hslToHex(h, 55, 50);
-      localStorage.setItem('muriel_theme_accent', state.themeAccent);
+      localStorage.setItem('eclipse_theme_accent', state.themeAccent);
       if (state.themeMode === 'auto') {
         const targetMode = currentEffectiveMode || 'dark';
         state.themeMode = targetMode;
-        localStorage.setItem('muriel_theme_mode', targetMode);
+        localStorage.setItem('eclipse_theme_mode', targetMode);
       }
       updateThemeFromState();
       if (el.themeSwatches) el.themeSwatches.forEach(sw => sw.classList.remove('active'));
@@ -11454,7 +11454,7 @@ async function fetchAndApplyTranslation() {
       state.themeIntensity = val;
       document.body.classList.toggle('intensity-zero', state.themeIntensity < 8);
       if (el.valIntensity) el.valIntensity.textContent = val + '%';
-      localStorage.setItem('muriel_theme_intensity', val.toString());
+      localStorage.setItem('eclipse_theme_intensity', val.toString());
       updateThemeFromState();
     });
   }
@@ -11468,7 +11468,7 @@ async function fetchAndApplyTranslation() {
       const val = parseInt(e.target.value, 10);
       state.themeBrightness = val;
       if (el.valBrightness) el.valBrightness.textContent = val + '%';
-      localStorage.setItem('muriel_theme_brightness', val.toString());
+      localStorage.setItem('eclipse_theme_brightness', val.toString());
       updateThemeFromState();
     });
   }
@@ -11496,7 +11496,7 @@ async function fetchAndApplyTranslation() {
       const val = parseInt(e.target.value, 10);
       if (el.valFontScale) el.valFontScale.textContent = `${val}%`;
       document.documentElement.style.setProperty('--font-scale', ((val / 100) * 0.95 * 1.25).toString());
-      localStorage.setItem('muriel_font_scale', val.toString());
+      localStorage.setItem('eclipse_font_scale', val.toString());
       requestAnimationFrame(updateEngineWidthVar);
     });
   }
@@ -11512,12 +11512,12 @@ async function fetchAndApplyTranslation() {
   ].forEach(({ btn, key }) => {
     if (btn) {
       btn.addEventListener('click', () => {
-        localStorage.setItem('muriel_font', key);
+        localStorage.setItem('eclipse_font', key);
         applyFont(key);
       });
     }
   });
-  applyFont(state.riffFont);
+  applyFont(state.eclipseFont);
 
   function applySearchPos(pos) {
     if (!['left', 'middle', 'right'].includes(pos)) pos = 'middle';
@@ -11538,7 +11538,7 @@ async function fetchAndApplyTranslation() {
     }
   }
 
-  const savedSearchPos = localStorage.getItem('muriel_search_pos') || 'middle';
+  const savedSearchPos = localStorage.getItem('eclipse_search_pos') || 'middle';
   applySearchPos(savedSearchPos);
 
   const searchPosDropdown = document.getElementById('search-pos-dropdown');
@@ -11554,7 +11554,7 @@ async function fetchAndApplyTranslation() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const val = opt.dataset.value;
-        localStorage.setItem('muriel_search_pos', val);
+        localStorage.setItem('eclipse_search_pos', val);
         applySearchPos(val);
         searchPosDropdown.classList.remove('open');
       });
@@ -11586,7 +11586,7 @@ async function fetchAndApplyTranslation() {
       if (el.valCornerRadius) el.valCornerRadius.textContent = val === 16 ? 'Default' : `${val}px`;
       document.documentElement.style.setProperty('--md-shape-corner-l', `${val}px`);
       document.documentElement.style.setProperty('--md-shape-corner-m', `${Math.max(0, val - 4)}px`);
-      localStorage.setItem('muriel_corner_radius', val.toString());
+      localStorage.setItem('eclipse_corner_radius', val.toString());
     });
   }
 
@@ -11595,7 +11595,7 @@ async function fetchAndApplyTranslation() {
       const val = Math.max(20, Math.min(100, parseInt(e.target.value, 10) || 100));
       if (el.valUiAlpha) el.valUiAlpha.textContent = `${val}%`;
       document.documentElement.style.setProperty('--ui-alpha', `${val}%`);
-      localStorage.setItem('muriel_ui_alpha', val.toString());
+      localStorage.setItem('eclipse_ui_alpha', val.toString());
       refreshCachedThemeColors();
     });
   }
@@ -11606,7 +11606,7 @@ async function fetchAndApplyTranslation() {
       if (el.sliderUiAlpha) el.sliderUiAlpha.value = val;
       if (el.valUiAlpha) el.valUiAlpha.textContent = `${val}%`;
       document.documentElement.style.setProperty('--ui-alpha', `${val}%`);
-      localStorage.setItem('muriel_ui_alpha', val.toString());
+      localStorage.setItem('eclipse_ui_alpha', val.toString());
       refreshCachedThemeColors();
     });
   }
@@ -11616,7 +11616,7 @@ async function fetchAndApplyTranslation() {
       const val = Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 100));
       if (el.valTextAlpha) el.valTextAlpha.textContent = `${val}%`;
       document.documentElement.style.setProperty('--text-alpha', `${val}%`);
-      localStorage.setItem('muriel_text_alpha', val.toString());
+      localStorage.setItem('eclipse_text_alpha', val.toString());
       refreshCachedThemeColors();
     });
   }
@@ -11627,7 +11627,7 @@ async function fetchAndApplyTranslation() {
       if (el.sliderTextAlpha) el.sliderTextAlpha.value = val;
       if (el.valTextAlpha) el.valTextAlpha.textContent = `${val}%`;
       document.documentElement.style.setProperty('--text-alpha', `${val}%`);
-      localStorage.setItem('muriel_text_alpha', val.toString());
+      localStorage.setItem('eclipse_text_alpha', val.toString());
       refreshCachedThemeColors();
     });
   }
@@ -11640,7 +11640,7 @@ async function fetchAndApplyTranslation() {
       if (window.electronAPI && window.electronAPI.pickMedia) {
         const url = await window.electronAPI.pickMedia();
         if (url) {
-          localStorage.setItem('muriel_banner_media', url);
+          localStorage.setItem('eclipse_banner_media', url);
           const thumb = getTrackThumbUrl(state.currentTrack);
           updateRightPanelBanner(thumb);
           updatePlaylistDetailBanner(thumb);
@@ -11651,7 +11651,7 @@ async function fetchAndApplyTranslation() {
 
   if (btnResetBannerMedia) {
     btnResetBannerMedia.addEventListener('click', () => {
-      localStorage.removeItem('muriel_banner_media');
+      localStorage.removeItem('eclipse_banner_media');
       const thumb = getTrackThumbUrl(state.currentTrack);
       updateRightPanelBanner(thumb);
       updatePlaylistDetailBanner(thumb);
@@ -11667,7 +11667,7 @@ async function fetchAndApplyTranslation() {
       const v = parseInt(e.target.value, 10);
       document.documentElement.style.setProperty('--banner-blur', `${v}px`);
       if (valBannerBlur) valBannerBlur.textContent = `${v}px`;
-      localStorage.setItem('muriel_banner_blur', v.toString());
+      localStorage.setItem('eclipse_banner_blur', v.toString());
     });
   }
 
@@ -11680,7 +11680,7 @@ async function fetchAndApplyTranslation() {
       const v = parseInt(e.target.value, 10);
       document.documentElement.style.setProperty('--banner-opacity', `${v / 100}`);
       if (valBannerOpacity) valBannerOpacity.textContent = `${v}%`;
-      localStorage.setItem('muriel_banner_opacity', v.toString());
+      localStorage.setItem('eclipse_banner_opacity', v.toString());
     });
   }
 
@@ -11699,7 +11699,7 @@ async function fetchAndApplyTranslation() {
         rightBanner.style.setProperty('--banner-fade-end', `${v}%`);
       }
       if (valBannerFade) valBannerFade.textContent = `${v}%`;
-      localStorage.setItem('muriel_banner_fade', v.toString());
+      localStorage.setItem('eclipse_banner_fade', v.toString());
     });
   }
 
@@ -11749,7 +11749,7 @@ async function fetchAndApplyTranslation() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const val = opt.dataset.value;
-        localStorage.setItem('muriel_banner_fit', val);
+        localStorage.setItem('eclipse_banner_fit', val);
         applyBannerFit(val);
         if (bannerFitLabel) bannerFitLabel.textContent = opt.textContent;
         bannerFitMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.remove('selected'));
@@ -11781,9 +11781,9 @@ async function fetchAndApplyTranslation() {
   if (window.electronAPI && window.electronAPI.onWindowVisibility) window.electronAPI.onWindowVisibility(() => syncBgVideoPlayback());
 
   function updateCustomBg() {
-    const bgUrl = localStorage.getItem('muriel_bg_url') || '';
-    const opacityVal = parseInt(localStorage.getItem('muriel_bg_opacity') ?? '100', 10);
-    let blurVal = parseInt(localStorage.getItem('muriel_bg_blur') ?? '0', 10);
+    const bgUrl = localStorage.getItem('eclipse_bg_url') || '';
+    const opacityVal = parseInt(localStorage.getItem('eclipse_bg_opacity') ?? '100', 10);
+    let blurVal = parseInt(localStorage.getItem('eclipse_bg_blur') ?? '0', 10);
     const isVideo = /\.(mp4|webm)($|\?)/i.test(bgUrl);
     document.body.classList.toggle('has-video-bg', isVideo && !!bgUrl);
 
@@ -11843,7 +11843,7 @@ async function fetchAndApplyTranslation() {
     const animatedBg = /\.(gif|mp4|webm)($|\?)/i.test(bgUrl);
     const glassLite = animatedBg && getAdv('glass_blur', false);
     document.body.classList.toggle('glass-lite', glassLite);
-    if (glassLite) blurVal = Math.max(blurVal, parseInt(localStorage.getItem('muriel_glass_blur') || '16', 10) || 16);
+    if (glassLite) blurVal = Math.max(blurVal, parseInt(localStorage.getItem('eclipse_glass_blur') || '16', 10) || 16);
 
     const media = customBg.firstElementChild;
     if (media) {
@@ -11859,20 +11859,20 @@ async function fetchAndApplyTranslation() {
 
   function currentUiAlpha() { return Number(document.getElementById('slider-ui-alpha').value); }
   function setUiAlphaViaSlider(v) { const s = document.getElementById('slider-ui-alpha'); if (!s) return; s.value = v; s.dispatchEvent(new Event('input', { bubbles: true })); }
-  function backgroundActive() { return !!localStorage.getItem('muriel_bg_url') || getAdv('cover_bg', true); }
+  function backgroundActive() { return !!localStorage.getItem('eclipse_bg_url') || getAdv('cover_bg', true); }
   function onBackgroundChanged(kind, enabled) {
     if (!getAdv('ui_alpha_auto', true)) return;
     if (enabled) {
       const now = currentUiAlpha();
-      if (now > 50) { localStorage.setItem('muriel_ui_alpha_prev', String(now)); setUiAlphaViaSlider(50); localStorage.setItem('muriel_ui_alpha_auto', '50'); localStorage.setItem('muriel_ui_alpha_auto_kind', kind); }
+      if (now > 50) { localStorage.setItem('eclipse_ui_alpha_prev', String(now)); setUiAlphaViaSlider(50); localStorage.setItem('eclipse_ui_alpha_auto', '50'); localStorage.setItem('eclipse_ui_alpha_auto_kind', kind); }
     } else {
       // undo when the background that dimmed the interface goes away. Checking "no background at all" never
       // passed with the cover background on (the default), so removing a custom one left the UI at 50%.
-      const autoKind = localStorage.getItem('muriel_ui_alpha_auto_kind');
+      const autoKind = localStorage.getItem('eclipse_ui_alpha_auto_kind');
       if (autoKind ? autoKind !== kind : backgroundActive()) return;
-      const auto = localStorage.getItem('muriel_ui_alpha_auto'), prev = localStorage.getItem('muriel_ui_alpha_prev');
+      const auto = localStorage.getItem('eclipse_ui_alpha_auto'), prev = localStorage.getItem('eclipse_ui_alpha_prev');
       if (auto !== null && prev !== null && currentUiAlpha() === Number(auto)) setUiAlphaViaSlider(Number(prev));
-      localStorage.removeItem('muriel_ui_alpha_auto'); localStorage.removeItem('muriel_ui_alpha_prev'); localStorage.removeItem('muriel_ui_alpha_auto_kind');
+      localStorage.removeItem('eclipse_ui_alpha_auto'); localStorage.removeItem('eclipse_ui_alpha_prev'); localStorage.removeItem('eclipse_ui_alpha_auto_kind');
     }
   }
 
@@ -11881,7 +11881,7 @@ async function fetchAndApplyTranslation() {
       if (window.electronAPI && window.electronAPI.pickMedia) {
         const url = await window.electronAPI.pickMedia();
         if (url) {
-          localStorage.setItem('muriel_bg_url', url);
+          localStorage.setItem('eclipse_bg_url', url);
           updateCustomBg();
           onBackgroundChanged('custom', true);
         }
@@ -11891,7 +11891,7 @@ async function fetchAndApplyTranslation() {
 
   if (btnRemoveCustomBg) {
     btnRemoveCustomBg.addEventListener('click', () => {
-      localStorage.removeItem('muriel_bg_url');
+      localStorage.removeItem('eclipse_bg_url');
       updateCustomBg();
       onBackgroundChanged('custom', false);
     });
@@ -11901,7 +11901,7 @@ async function fetchAndApplyTranslation() {
     sliderBgOpacity.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       if (valBgOpacity) valBgOpacity.textContent = `${v}%`;
-      localStorage.setItem('muriel_bg_opacity', String(v));
+      localStorage.setItem('eclipse_bg_opacity', String(v));
       const customBg = document.getElementById('custom-bg');
       if (customBg) customBg.style.opacity = (v / 100).toString();
     });
@@ -11911,7 +11911,7 @@ async function fetchAndApplyTranslation() {
     sliderBgBlur.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       if (valBgBlur) valBgBlur.textContent = `${v}px`;
-      localStorage.setItem('muriel_bg_blur', String(v));
+      localStorage.setItem('eclipse_bg_blur', String(v));
       const customBg = document.getElementById('custom-bg');
       if (customBg) {
         customBg.style.filter = 'none';
@@ -11933,7 +11933,7 @@ async function fetchAndApplyTranslation() {
   const sliderCoverBgBrightness = document.getElementById('slider-cover-bg-brightness');
   const valCoverBgBrightness = document.getElementById('val-cover-bg-brightness');
   if (sliderCoverBgBrightness) {
-    const savedBrightness = parseInt(localStorage.getItem('muriel_cover_bg_brightness') ?? '45', 10);
+    const savedBrightness = parseInt(localStorage.getItem('eclipse_cover_bg_brightness') ?? '45', 10);
     sliderCoverBgBrightness.value = savedBrightness;
     if (valCoverBgBrightness) valCoverBgBrightness.textContent = `${savedBrightness}%`;
     document.documentElement.style.setProperty('--cover-bg-brightness', (savedBrightness / 100).toString());
@@ -11941,7 +11941,7 @@ async function fetchAndApplyTranslation() {
     sliderCoverBgBrightness.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       if (valCoverBgBrightness) valCoverBgBrightness.textContent = `${v}%`;
-      localStorage.setItem('muriel_cover_bg_brightness', String(v));
+      localStorage.setItem('eclipse_cover_bg_brightness', String(v));
       document.documentElement.style.setProperty('--cover-bg-brightness', (v / 100).toString());
     });
   }
@@ -11968,7 +11968,7 @@ async function fetchAndApplyTranslation() {
       const v = parseInt(e.target.value, 10);
       state.meshBrightness = v;
       if (valMeshBrightness) valMeshBrightness.textContent = `${v}%`;
-      localStorage.setItem('muriel_mesh_brightness', v.toString());
+      localStorage.setItem('eclipse_mesh_brightness', v.toString());
       updateThemeFromState();
     });
   }
@@ -11982,7 +11982,7 @@ async function fetchAndApplyTranslation() {
 
   let meshCfg = { ...DEFAULT_MESH_CFG };
   try {
-    const raw = localStorage.getItem('muriel_mesh_cfg');
+    const raw = localStorage.getItem('eclipse_mesh_cfg');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.p1 && parsed.p2) {
@@ -12029,7 +12029,7 @@ async function fetchAndApplyTranslation() {
     if (vlBlur) vlBlur.textContent = `${cfg.blur}px`;
 
     if (save) {
-      localStorage.setItem('muriel_mesh_cfg', JSON.stringify(cfg));
+      localStorage.setItem('eclipse_mesh_cfg', JSON.stringify(cfg));
     }
   }
 
@@ -12183,7 +12183,7 @@ async function fetchAndApplyTranslation() {
         e.stopPropagation();
         const val = opt.dataset.value;
         state.paletteStyle = val;
-        localStorage.setItem('muriel_palette_style', state.paletteStyle);
+        localStorage.setItem('eclipse_palette_style', state.paletteStyle);
         if (paletteLabel) paletteLabel.textContent = opt.textContent;
         paletteMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
@@ -12203,7 +12203,7 @@ async function fetchAndApplyTranslation() {
   const valGlassBlur = document.getElementById('val-glass-blur');
   function applyGlass() {
     const on = getAdv('glass_blur', false);
-    const px = Math.max(4, Math.min(40, parseInt(localStorage.getItem('muriel_glass_blur') || '16', 10) || 16));
+    const px = Math.max(4, Math.min(40, parseInt(localStorage.getItem('eclipse_glass_blur') || '16', 10) || 16));
     document.body.classList.toggle('glass', on);
     document.documentElement.style.setProperty('--glass-blur', `${px}px`);
     if (sliderGlassBlur) sliderGlassBlur.value = px;
@@ -12213,17 +12213,17 @@ async function fetchAndApplyTranslation() {
     updateCustomBg();
   }
   if (sliderGlassBlur) sliderGlassBlur.addEventListener('input', () => {
-    localStorage.setItem('muriel_glass_blur', sliderGlassBlur.value);
+    localStorage.setItem('eclipse_glass_blur', sliderGlassBlur.value);
     applyGlass();
   });
   applyGlass();
 
   const fpsBtns = document.querySelectorAll('[data-fps-cap]');
   const syncFpsBtns = () => {
-    const cur = localStorage.getItem('muriel_fps_cap') || '0';
+    const cur = localStorage.getItem('eclipse_fps_cap') || '0';
     fpsBtns.forEach(b => b.classList.toggle('active', b.dataset.fpsCap === cur));
   };
-  fpsBtns.forEach(b => b.addEventListener('click', () => { localStorage.setItem('muriel_fps_cap', b.dataset.fpsCap); syncFpsBtns(); }));
+  fpsBtns.forEach(b => b.addEventListener('click', () => { localStorage.setItem('eclipse_fps_cap', b.dataset.fpsCap); syncFpsBtns(); }));
   syncFpsBtns();
 
   const btnHwAccel = document.getElementById('btn-hw-accel');
@@ -12254,8 +12254,8 @@ async function fetchAndApplyTranslation() {
       } else if (key === 'glass_blur') {
         applyGlass();
         // glass over a fully opaque UI does nothing, so make it see-through the first time
-        if (newVal && parseInt(localStorage.getItem('muriel_ui_alpha') || '20', 10) >= 100) {
-          localStorage.setItem('muriel_ui_alpha', '60');
+        if (newVal && parseInt(localStorage.getItem('eclipse_ui_alpha') || '20', 10) >= 100) {
+          localStorage.setItem('eclipse_ui_alpha', '60');
           applyUiOpacity();
           showToast(Tm('Interface opacity set to 60% so the glass shows'), 'info');
         }
@@ -12325,21 +12325,21 @@ async function fetchAndApplyTranslation() {
 
   const btnSearchArtists = document.getElementById('btn-search-artists');
   if (btnSearchArtists) {
-    btnSearchArtists.classList.toggle('active', localStorage.getItem('muriel_search_artists') !== '0');
+    btnSearchArtists.classList.toggle('active', localStorage.getItem('eclipse_search_artists') !== '0');
     btnSearchArtists.addEventListener('click', () => {
       const v = !btnSearchArtists.classList.contains('active');
       btnSearchArtists.classList.toggle('active', v);
-      localStorage.setItem('muriel_search_artists', v ? '1' : '0');
+      localStorage.setItem('eclipse_search_artists', v ? '1' : '0');
     });
   }
 
   const btnSmooth = document.getElementById('btn-smooth-presets');
   if (btnSmooth) {
-    btnSmooth.classList.toggle('active', localStorage.getItem('muriel_smooth_presets') !== 'false');
+    btnSmooth.classList.toggle('active', localStorage.getItem('eclipse_smooth_presets') !== 'false');
     btnSmooth.addEventListener('click', () => {
       const v = !btnSmooth.classList.contains('active');
       btnSmooth.classList.toggle('active', v);
-      localStorage.setItem('muriel_smooth_presets', String(v));
+      localStorage.setItem('eclipse_smooth_presets', String(v));
     });
   }
   if (sidebarEl) {
@@ -12353,7 +12353,7 @@ async function fetchAndApplyTranslation() {
 
   const btnShowLocal = document.getElementById('btn-show-local');
   function updateShowLocalUI(animate = false) {
-    const show = localStorage.getItem('muriel_show_local') !== 'false';
+    const show = localStorage.getItem('eclipse_show_local') !== 'false';
     if (el.navLocal) el.navLocal.classList.toggle('nav-collapsed', !show);
     if (btnShowLocal) btnShowLocal.classList.toggle('active', show);
     if (!show && state.currentView === 'local') {
@@ -12373,8 +12373,8 @@ async function fetchAndApplyTranslation() {
   }
   if (btnShowLocal) {
     btnShowLocal.addEventListener('click', () => {
-      const show = localStorage.getItem('muriel_show_local') !== 'false';
-      localStorage.setItem('muriel_show_local', (!show) ? 'true' : 'false');
+      const show = localStorage.getItem('eclipse_show_local') !== 'false';
+      localStorage.setItem('eclipse_show_local', (!show) ? 'true' : 'false');
       updateShowLocalUI(true);
       refreshStacks();
     });
@@ -12386,13 +12386,13 @@ async function fetchAndApplyTranslation() {
   // Settings > Tracks > Show explicit tag [E] on songs (on unless turned off)
   const toggleExplicitTag = document.getElementById('toggle-explicit-tag');
   function applyExplicitTag() {
-    const on = localStorage.getItem('muriel_show_explicit') !== '0';
+    const on = localStorage.getItem('eclipse_show_explicit') !== '0';
     document.body.classList.toggle('hide-explicit-badges', !on);
     if (toggleExplicitTag) toggleExplicitTag.classList.toggle('active', on);
   }
   if (toggleExplicitTag) {
     toggleExplicitTag.addEventListener('click', () => {
-      localStorage.setItem('muriel_show_explicit', localStorage.getItem('muriel_show_explicit') === '0' ? '1' : '0');
+      localStorage.setItem('eclipse_show_explicit', localStorage.getItem('eclipse_show_explicit') === '0' ? '1' : '0');
       applyExplicitTag();
     });
   }
@@ -12402,14 +12402,14 @@ async function fetchAndApplyTranslation() {
     document.body.classList.toggle('no-hand-cursor', !!on);
   }
   const btnNoHandCursor = document.getElementById('btn-no-hand-cursor');
-  const noHand = localStorage.getItem('muriel_no_hand_cursor') !== '0';
+  const noHand = localStorage.getItem('eclipse_no_hand_cursor') !== '0';
   applyNoHandCursor(noHand);
   if (btnNoHandCursor) {
     btnNoHandCursor.classList.toggle('active', noHand);
     btnNoHandCursor.addEventListener('click', () => {
       const next = !btnNoHandCursor.classList.contains('active');
       btnNoHandCursor.classList.toggle('active', next);
-      localStorage.setItem('muriel_no_hand_cursor', next ? '1' : '0');
+      localStorage.setItem('eclipse_no_hand_cursor', next ? '1' : '0');
       applyNoHandCursor(next);
     });
   }
@@ -12418,14 +12418,14 @@ async function fetchAndApplyTranslation() {
     document.body.classList.toggle('highlight-buttons', !!on);
   }
   const btnHighlightButtons = document.getElementById('btn-highlight-buttons');
-  const initialHighlightButtons = localStorage.getItem('muriel_highlight_buttons') !== '0';
+  const initialHighlightButtons = localStorage.getItem('eclipse_highlight_buttons') !== '0';
   applyHighlightButtons(initialHighlightButtons);
   if (btnHighlightButtons) {
     btnHighlightButtons.classList.toggle('active', initialHighlightButtons);
     btnHighlightButtons.addEventListener('click', () => {
       const next = !btnHighlightButtons.classList.contains('active');
       btnHighlightButtons.classList.toggle('active', next);
-      localStorage.setItem('muriel_highlight_buttons', next ? '1' : '0');
+      localStorage.setItem('eclipse_highlight_buttons', next ? '1' : '0');
       applyHighlightButtons(next);
     });
   }
@@ -12485,7 +12485,7 @@ async function fetchAndApplyTranslation() {
     btnDiscordPresence.classList.toggle('active', discordPresenceOn());
     btnDiscordPresence.addEventListener('click', () => {
       const on = !discordPresenceOn();
-      localStorage.setItem('muriel_discord_presence', on ? 'true' : 'false');
+      localStorage.setItem('eclipse_discord_presence', on ? 'true' : 'false');
       btnDiscordPresence.classList.toggle('active', on);
       if (on) updateDiscordPresence();
       else if (window.electronAPI.discordPresenceClear) window.electronAPI.discordPresenceClear();
@@ -12494,7 +12494,7 @@ async function fetchAndApplyTranslation() {
 
   const btnWavyProgress = document.getElementById('btn-wavy-progress');
   function updateWavyProgressUI() {
-    const isWavy = localStorage.getItem('muriel_wavy_progress') !== 'false';
+    const isWavy = localStorage.getItem('eclipse_wavy_progress') !== 'false';
     const isPerf = document.body.classList.contains('perf');
     document.body.classList.toggle('no-wavy', isPerf ? true : !isWavy);
     if (btnWavyProgress) {
@@ -12504,7 +12504,7 @@ async function fetchAndApplyTranslation() {
 
   const btnProgressKnob = document.getElementById('btn-progress-knob');
   function updateProgressKnobUI() {
-    const isHidden = localStorage.getItem('muriel_progress_knob') === 'false';
+    const isHidden = localStorage.getItem('eclipse_progress_knob') === 'false';
     document.body.classList.toggle('no-knob', isHidden);
     if (btnProgressKnob) {
       btnProgressKnob.classList.toggle('active', !isHidden);
@@ -12513,7 +12513,7 @@ async function fetchAndApplyTranslation() {
 
   const btnProgressBg = document.getElementById('btn-progress-bg');
   function updateProgressBgUI() {
-    const isHidden = localStorage.getItem('muriel_progress_bg') === 'false';
+    const isHidden = localStorage.getItem('eclipse_progress_bg') === 'false';
     document.body.classList.toggle('no-progress-bg', isHidden);
     if (btnProgressBg) {
       btnProgressBg.classList.toggle('active', !isHidden);
@@ -12527,7 +12527,7 @@ async function fetchAndApplyTranslation() {
 
   const m3c = { canvas: null, ctx: null, img: new Image(), imgReady: false, from: 0, to: 0, start: 0, raf: 0, last: 0, phase: 0, hoverProgress: 0, isHovered: false };
   // phones keep the plain cover: the animated ring doesn't fit the mini player and its loop costs battery
-  function m3cEnabled() { return !isPhoneApp && localStorage.getItem('muriel_m3_cover') !== '0' && !document.body.classList.contains('perf'); }
+  function m3cEnabled() { return !isPhoneApp && localStorage.getItem('eclipse_m3_cover') !== '0' && !document.body.classList.contains('perf'); }
   function m3cInit() {
     m3c.canvas = document.getElementById('m3c-canvas');
     if (!m3c.canvas) return;
@@ -12563,7 +12563,7 @@ async function fetchAndApplyTranslation() {
     if (url) m3c.img.src = url;
   }
   function m3cShapeRadii(now) {
-    const S = window.RiffShapes;
+    const S = window.EclipseShapes;
     if (!S || !S.ready()) return null;
     if (!m3c.start) { m3c.start = now; m3c.from = 0; m3c.to = 0; }
     if (now - m3c.start >= S.HOLD_MS) { m3c.from = m3c.to; m3c.to = S.next(m3c.from); m3c.start = now; }
@@ -12572,7 +12572,7 @@ async function fetchAndApplyTranslation() {
   }
   function m3cDraw(now) {
     const ctx = m3c.ctx;
-    const S = window.RiffShapes;
+    const S = window.EclipseShapes;
     if (!ctx || !S) return;
     const sh = m3cShapeRadii(now);
     if (!sh) return;
@@ -12689,17 +12689,17 @@ async function fetchAndApplyTranslation() {
 
   // auto battery saver: perf mode while a laptop runs on battery (the stored setting is left alone)
   let batterySaver = false;
-  function storedPerfMode() { const v = localStorage.getItem('muriel_perf_mode'); return v === '1' || v === 'true'; }
+  function storedPerfMode() { const v = localStorage.getItem('eclipse_perf_mode'); return v === '1' || v === 'true'; }
   function applyPerfMode(on) {
     on = !!on || batterySaver;
     document.body.classList.toggle('perf', on);
-    const isWavy = localStorage.getItem('muriel_wavy_progress') !== 'false';
+    const isWavy = localStorage.getItem('eclipse_wavy_progress') !== 'false';
     document.body.classList.toggle('no-wavy', on ? true : !isWavy);
     syncBgVideoPlayback();
     applyM3Cover();
   }
   const btnBarWave = document.getElementById('btn-bar-wave');
-  const barWaveOn = localStorage.getItem('muriel_bar_wave') !== '0';
+  const barWaveOn = localStorage.getItem('eclipse_bar_wave') !== '0';
   function applyBarWave(on) {
     document.body.classList.toggle('bar-wave-off', !on);
     const vc = document.getElementById('visualizer-container');
@@ -12735,34 +12735,34 @@ async function fetchAndApplyTranslation() {
     btnBarWave.addEventListener('click', () => {
       const next = !btnBarWave.classList.contains('active');
       btnBarWave.classList.toggle('active', next);
-      localStorage.setItem('muriel_bar_wave', next ? '1' : '0');
+      localStorage.setItem('eclipse_bar_wave', next ? '1' : '0');
       applyBarWave(next);
     });
   }
 
   const toggleM3Cover = document.getElementById('toggle-m3-cover');
   if (toggleM3Cover) {
-    const saved = localStorage.getItem('muriel_m3_cover');
+    const saved = localStorage.getItem('eclipse_m3_cover');
     const isM3On = saved !== '0';
     toggleM3Cover.classList.toggle('active', isM3On);
     toggleM3Cover.addEventListener('click', () => {
       const next = !toggleM3Cover.classList.contains('active');
       toggleM3Cover.classList.toggle('active', next);
-      localStorage.setItem('muriel_m3_cover', next ? '1' : '0');
+      localStorage.setItem('eclipse_m3_cover', next ? '1' : '0');
       applyM3Cover();
     });
   }
 
-  updateTvkVisualizerSetting(localStorage.getItem('muriel_tvk_visualizer') !== 'false');
-  updateTvkVisualizerLyricsSetting(localStorage.getItem('muriel_tvk_visualizer_lyrics') === 'true');
-  updateTvkVisualizerOpacity(parseInt(localStorage.getItem('muriel_tvk_visualizer_opacity') || '85', 10));
+  updateTvkVisualizerSetting(localStorage.getItem('eclipse_tvk_visualizer') !== 'false');
+  updateTvkVisualizerLyricsSetting(localStorage.getItem('eclipse_tvk_visualizer_lyrics') === 'true');
+  updateTvkVisualizerOpacity(parseInt(localStorage.getItem('eclipse_tvk_visualizer_opacity') || '85', 10));
 
   const btnPerfMode = document.getElementById('btn-perf-mode');
-  const initialPerfMode = localStorage.getItem('muriel_perf_mode') === '1' || localStorage.getItem('muriel_perf_mode') === 'true';
+  const initialPerfMode = localStorage.getItem('eclipse_perf_mode') === '1' || localStorage.getItem('eclipse_perf_mode') === 'true';
   applyPerfMode(initialPerfMode);
   // the battery saver had no switch: on battery it forced performance mode with no way back
   const btnBatterySaver = document.getElementById('btn-battery-saver');
-  const batterySaverWanted = () => localStorage.getItem('muriel_battery_saver') !== '0';
+  const batterySaverWanted = () => localStorage.getItem('eclipse_battery_saver') !== '0';
   let batteryRef = null;
   const syncBatterySaver = () => {
     const next = !!(batteryRef && batteryRef.charging === false && batterySaverWanted());
@@ -12775,7 +12775,7 @@ async function fetchAndApplyTranslation() {
     btnBatterySaver.addEventListener('click', () => {
       const next = !btnBatterySaver.classList.contains('active');
       btnBatterySaver.classList.toggle('active', next);
-      localStorage.setItem('muriel_battery_saver', next ? '1' : '0');
+      localStorage.setItem('eclipse_battery_saver', next ? '1' : '0');
       syncBatterySaver();
     });
   }
@@ -12794,16 +12794,16 @@ async function fetchAndApplyTranslation() {
     btnPerfMode.addEventListener('click', () => {
       const next = !btnPerfMode.classList.contains('active');
       btnPerfMode.classList.toggle('active', next);
-      localStorage.setItem('muriel_perf_mode', next ? '1' : '0');
+      localStorage.setItem('eclipse_perf_mode', next ? '1' : '0');
       applyPerfMode(next);
     });
   }
 
   if (btnWavyProgress) {
     btnWavyProgress.addEventListener('click', () => {
-      const isWavy = localStorage.getItem('muriel_wavy_progress') !== 'false';
+      const isWavy = localStorage.getItem('eclipse_wavy_progress') !== 'false';
       const next = !isWavy;
-      localStorage.setItem('muriel_wavy_progress', next ? 'true' : 'false');
+      localStorage.setItem('eclipse_wavy_progress', next ? 'true' : 'false');
       updateWavyProgressUI();
       hasDrawnPausedFrame = false;
     });
@@ -12811,9 +12811,9 @@ async function fetchAndApplyTranslation() {
 
   if (btnProgressKnob) {
     btnProgressKnob.addEventListener('click', () => {
-      const isKnob = localStorage.getItem('muriel_progress_knob') !== 'false';
+      const isKnob = localStorage.getItem('eclipse_progress_knob') !== 'false';
       const next = !isKnob;
-      localStorage.setItem('muriel_progress_knob', next ? 'true' : 'false');
+      localStorage.setItem('eclipse_progress_knob', next ? 'true' : 'false');
       updateProgressKnobUI();
       hasDrawnPausedFrame = false;
       if (!animationFrameId && typeof startVisualizers === 'function') startVisualizers();
@@ -12822,9 +12822,9 @@ async function fetchAndApplyTranslation() {
 
   if (btnProgressBg) {
     btnProgressBg.addEventListener('click', () => {
-      const isBg = localStorage.getItem('muriel_progress_bg') !== 'false';
+      const isBg = localStorage.getItem('eclipse_progress_bg') !== 'false';
       const next = !isBg;
-      localStorage.setItem('muriel_progress_bg', next ? 'true' : 'false');
+      localStorage.setItem('eclipse_progress_bg', next ? 'true' : 'false');
       updateProgressBgUI();
       hasDrawnPausedFrame = false;
       if (!animationFrameId && typeof startVisualizers === 'function') startVisualizers();
@@ -12836,7 +12836,7 @@ async function fetchAndApplyTranslation() {
   updateProgressBgUI();
 
   const btnTrayOnClose = document.getElementById('btn-tray-on-close');
-  const storedTrayOnClose = localStorage.getItem('muriel_tray_on_close');
+  const storedTrayOnClose = localStorage.getItem('eclipse_tray_on_close');
   const savedTrayOnClose = storedTrayOnClose !== null
     ? storedTrayOnClose === 'true'
     : /Windows|Mac/.test(navigator.userAgent);
@@ -12845,7 +12845,7 @@ async function fetchAndApplyTranslation() {
     btnTrayOnClose.addEventListener('click', () => {
       const next = !btnTrayOnClose.classList.contains('active');
       btnTrayOnClose.classList.toggle('active', next);
-      localStorage.setItem('muriel_tray_on_close', next ? 'true' : 'false');
+      localStorage.setItem('eclipse_tray_on_close', next ? 'true' : 'false');
       if (window.electronAPI && window.electronAPI.setTrayOnClose) {
         window.electronAPI.setTrayOnClose(next);
       }
@@ -12883,7 +12883,7 @@ async function fetchAndApplyTranslation() {
     // after the frame's style work, so it doesn't force a second layout of the whole settings page
     const pane = document.querySelector('#view-settings .settings-pane'); if (pane) requestAnimationFrame(() => { if (pane.scrollTop) pane.scrollTop = 0; });
     settingsScrollTop();
-    try { localStorage.setItem('muriel_settings_cat', cat); } catch (e) {}
+    try { localStorage.setItem('eclipse_settings_cat', cat); } catch (e) {}
     if (cat === 'custom-themes' && typeof renderThemeCards === 'function') renderThemeCards();
     if (cat === 'plugins' && typeof reloadPluginsList === 'function') reloadPluginsList();
     refreshStacks();
@@ -12911,12 +12911,12 @@ async function fetchAndApplyTranslation() {
   }
   // opening Settings: wide windows show the last category, phones the list
   function enterSettings() {
-    let last = 'interface'; try { last = localStorage.getItem('muriel_settings_cat') || 'interface'; } catch (e) {}
+    let last = 'interface'; try { last = localStorage.getItem('eclipse_settings_cat') || 'interface'; } catch (e) {}
     showSettingsCategory(last);
     if (settingsNarrow.matches) showSettingsList();
   }
   // Android back: leave the search, then the open category, before leaving Settings. true = handled
-  window.MurielSettingsBack = function () {
+  window.EclipseSettingsBack = function () {
     if (!settingsView || !settingsView.classList.contains('active')) return false;
     if (settingsSearchInput && settingsSearchInput.value) { clearSettingsSearch(); return true; }
     if (settingsNarrow.matches && !settingsView.classList.contains('settings-at-list')) { showSettingsList(); return true; }
@@ -13019,18 +13019,18 @@ async function fetchAndApplyTranslation() {
   let appCssCache = null;
 
   function applyCustomStyles() {
-    document.querySelectorAll('style[data-muriel-custom]').forEach((n) => n.remove());
+    document.querySelectorAll('style[data-eclipse-custom]').forEach((n) => n.remove());
     customThemes.filter((t) => t.enabled).forEach((t) => {
       const s = document.createElement('style');
-      s.dataset.murielCustom = 'theme';
+      s.dataset.eclipseCustom = 'theme';
       s.dataset.themeId = t.id;
       s.textContent = t.css;
       document.head.appendChild(s);
     });
-    const userCss = localStorage.getItem('muriel_custom_css') || '';
+    const userCss = localStorage.getItem('eclipse_custom_css') || '';
     if (userCss.trim()) {
       const s = document.createElement('style');
-      s.dataset.murielCustom = 'user';
+      s.dataset.eclipseCustom = 'user';
       s.textContent = userCss;
       document.head.appendChild(s);
     }
@@ -13038,9 +13038,9 @@ async function fetchAndApplyTranslation() {
   }
 
   function resetCustomStyling() {
-    const userCss = localStorage.getItem('muriel_custom_css') || '';
-    if (userCss.trim()) localStorage.setItem('muriel_custom_css_backup', userCss);
-    localStorage.removeItem('muriel_custom_css');
+    const userCss = localStorage.getItem('eclipse_custom_css') || '';
+    if (userCss.trim()) localStorage.setItem('eclipse_custom_css_backup', userCss);
+    localStorage.removeItem('eclipse_custom_css');
     customThemes.forEach((t) => { t.enabled = false; });
     if (window.electronAPI && window.electronAPI.disableAllThemes) window.electronAPI.disableAllThemes();
     if (typeof cssEditorInstance !== 'undefined' && cssEditorInstance) cssEditorInstance.setValue('');
@@ -13163,7 +13163,7 @@ async function fetchAndApplyTranslation() {
     showToast(Tm('Plugin {0} failed: {1}', file, e && e.message ? e.message : e), 'error');
   }
   function createPluginApi(p) {
-    const prefix = `muriel_plugin_${p.file}_`;
+    const prefix = `eclipse_plugin_${p.file}_`;
     return {
       plugin: { file: p.file, name: p.name, author: p.author, version: p.version },
       on(event, cb) {
@@ -13174,7 +13174,7 @@ async function fetchAndApplyTranslation() {
       toast: (message, type) => showToast(String(message), type || 'info'),
       addStyle(css) {
         const s = document.createElement('style');
-        s.dataset.murielCustom = 'plugin';
+        s.dataset.eclipseCustom = 'plugin';
         s.dataset.plugin = p.file;
         s.textContent = css;
         document.head.appendChild(s);
@@ -13194,7 +13194,7 @@ async function fetchAndApplyTranslation() {
     if (loadedPlugins.has(p.file)) return;
     try {
       const api = createPluginApi(p);
-      const fn = new Function('Muriel', 'plugin', `${p.code}\n//# sourceURL=muriel-plugin-${p.file}`);
+      const fn = new Function('Eclipse', 'plugin', `${p.code}\n//# sourceURL=eclipse-plugin-${p.file}`);
       const result = fn(api, api.plugin);
       loadedPlugins.set(p.file, { stop: result && typeof result.stop === 'function' ? result.stop : null });
     } catch (e) { reportPluginError(p.file, e); }
@@ -13302,8 +13302,8 @@ async function fetchAndApplyTranslation() {
     const high = hex('--md-sys-color-surface-container-high-solid', '#2b2930');
     const primary = hex('--md-sys-color-primary', '#d0bcff');
     const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
-    monaco.editor.defineTheme('muriel', { base: lum(bg) < 0.5 ? 'vs-dark' : 'vs', inherit: true, rules: [], colors: { 'editor.background': bg, 'editorGutter.background': bg, 'minimap.background': bg, 'editor.lineHighlightBackground': high, 'editorCursor.foreground': primary, 'editor.selectionBackground': primary + '55' } });
-    monaco.editor.setTheme('muriel');
+    monaco.editor.defineTheme('eclipse', { base: lum(bg) < 0.5 ? 'vs-dark' : 'vs', inherit: true, rules: [], colors: { 'editor.background': bg, 'editorGutter.background': bg, 'minimap.background': bg, 'editor.lineHighlightBackground': high, 'editorCursor.foreground': primary, 'editor.selectionBackground': primary + '55' } });
+    monaco.editor.setTheme('eclipse');
   }
 
   async function openCssEditor() {
@@ -13314,7 +13314,7 @@ async function fetchAndApplyTranslation() {
     defineRiffMonacoTheme(monaco);
     if (cssEditorInstance) { cssEditorInstance.focus(); return; }
     cssEditorInstance = monaco.editor.create(document.getElementById('css-editor-host'), {
-      value: localStorage.getItem('muriel_custom_css') || '/* Your CSS goes here. Example:\n.btn-pill-primary { border-radius: 8px; }\n*/\n',
+      value: localStorage.getItem('eclipse_custom_css') || '/* Your CSS goes here. Example:\n.btn-pill-primary { border-radius: 8px; }\n*/\n',
       language: 'css',
       theme: 'riff',
       automaticLayout: true,
@@ -13336,7 +13336,7 @@ async function fetchAndApplyTranslation() {
     cssEditorInstance.onDidChangeModelContent(() => {
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
-        localStorage.setItem('muriel_custom_css', cssEditorInstance.getValue());
+        localStorage.setItem('eclipse_custom_css', cssEditorInstance.getValue());
         applyCustomStyles();
       }, 350);
     });
@@ -13349,17 +13349,17 @@ async function fetchAndApplyTranslation() {
   if (btnCssClose) btnCssClose.addEventListener('click', () => document.getElementById('css-editor').classList.add('hidden'));
   const btnCssClear = document.getElementById('btn-css-clear');
   if (btnCssClear) btnCssClear.addEventListener('click', () => {
-    const current = localStorage.getItem('muriel_custom_css') || '';
-    if (current.trim()) localStorage.setItem('muriel_custom_css_backup', current);
+    const current = localStorage.getItem('eclipse_custom_css') || '';
+    if (current.trim()) localStorage.setItem('eclipse_custom_css_backup', current);
     if (cssEditorInstance) cssEditorInstance.setValue('');
-    else { localStorage.removeItem('muriel_custom_css'); applyCustomStyles(); }
+    else { localStorage.removeItem('eclipse_custom_css'); applyCustomStyles(); }
   });
   const btnCssRestore = document.getElementById('btn-css-restore');
   if (btnCssRestore) btnCssRestore.addEventListener('click', () => {
-    const backup = localStorage.getItem('muriel_custom_css_backup');
+    const backup = localStorage.getItem('eclipse_custom_css_backup');
     if (!backup) { showToast(Tm('Nothing to restore'), 'info'); return; }
     if (cssEditorInstance) cssEditorInstance.setValue(backup);
-    else { localStorage.setItem('muriel_custom_css', backup); applyCustomStyles(); }
+    else { localStorage.setItem('eclipse_custom_css', backup); applyCustomStyles(); }
   });
 
   function addSliderTicks(input) {
@@ -13415,14 +13415,14 @@ async function fetchAndApplyTranslation() {
     settingWinMediaKeys.style.display = isWindows ? '' : 'none';
   }
 
-  // a new key, off by default: the old one was on for everyone, which hid Muriel from the Windows media overlay
-  const savedWinMediaKeys = localStorage.getItem('muriel_win_global_media_keys') === 'true';
+  // a new key, off by default: the old one was on for everyone, which hid Eclipse from the Windows media overlay
+  const savedWinMediaKeys = localStorage.getItem('eclipse_win_global_media_keys') === 'true';
   if (btnWinMediaKeys) {
     btnWinMediaKeys.classList.toggle('active', savedWinMediaKeys);
     btnWinMediaKeys.addEventListener('click', () => {
       const next = !btnWinMediaKeys.classList.contains('active');
       btnWinMediaKeys.classList.toggle('active', next);
-      localStorage.setItem('muriel_win_global_media_keys', next ? 'true' : 'false');
+      localStorage.setItem('eclipse_win_global_media_keys', next ? 'true' : 'false');
       if (window.electronAPI && window.electronAPI.setMediaKeys) {
         window.electronAPI.setMediaKeys(next);
       }
@@ -13452,12 +13452,12 @@ async function fetchAndApplyTranslation() {
       }
     }
     if (d.toggles) {
-      setSwitch(document.getElementById('btn-show-local'), d.toggles.muriel_show_local);
-      setSwitch(document.getElementById('btn-search-artists'), d.toggles.muriel_search_artists);
-      setSwitch(document.getElementById('btn-no-hand-cursor'), d.toggles.muriel_no_hand_cursor);
-      setSwitch(document.getElementById('btn-perf-mode'), d.toggles.muriel_perf_mode);
-      if (d.toggles.muriel_custom_bg_enabled && d.background) {
-        localStorage.setItem('muriel_bg_url', d.background);
+      setSwitch(document.getElementById('btn-show-local'), d.toggles.eclipse_show_local);
+      setSwitch(document.getElementById('btn-search-artists'), d.toggles.eclipse_search_artists);
+      setSwitch(document.getElementById('btn-no-hand-cursor'), d.toggles.eclipse_no_hand_cursor);
+      setSwitch(document.getElementById('btn-perf-mode'), d.toggles.eclipse_perf_mode);
+      if (d.toggles.eclipse_custom_bg_enabled && d.background) {
+        localStorage.setItem('eclipse_bg_url', d.background);
         if (typeof updateCustomBg === 'function') updateCustomBg();
         if (typeof onBackgroundChanged === 'function') onBackgroundChanged('custom', true);
       }
@@ -13487,8 +13487,8 @@ async function fetchAndApplyTranslation() {
   async function toggleMiniWindow() {
     if (window.electronAPI && window.electronAPI.toggleMiniWindow) {
       const isNowMini = await window.electronAPI.toggleMiniWindow();
-      // lyrics under the mini player (Riff 43): the window opens tall enough for them
-      if (isNowMini && localStorage.getItem('muriel_mini_lyrics') === '1' && window.electronAPI.setMiniLyrics) {
+      // lyrics under the mini player (Eclipse 43): the window opens tall enough for them
+      if (isNowMini && localStorage.getItem('eclipse_mini_lyrics') === '1' && window.electronAPI.setMiniLyrics) {
         try { await window.electronAPI.setMiniLyrics(true); } catch (e) {}
       }
     }
@@ -13505,20 +13505,20 @@ async function fetchAndApplyTranslation() {
   const sliderCrossfade = document.getElementById('slider-crossfade');
   const valCrossfade = document.getElementById('val-crossfade');
   if (sliderCrossfade) {
-    const cf = parseInt(localStorage.getItem('muriel_crossfade') || '0', 10);
+    const cf = parseInt(localStorage.getItem('eclipse_crossfade') || '0', 10);
     sliderCrossfade.value = cf;
     if (valCrossfade) valCrossfade.textContent = cf > 0 ? `${cf}s` : 'Off';
     sliderCrossfade.addEventListener('input', (e) => {
       const v = parseInt(e.target.value, 10);
       if (valCrossfade) valCrossfade.textContent = v > 0 ? `${v}s` : 'Off';
-      localStorage.setItem('muriel_crossfade', String(v));
+      localStorage.setItem('eclipse_crossfade', String(v));
     });
   }
 
   if (el.btnTrEnabled) {
     el.btnTrEnabled.addEventListener('click', () => {
       state.trEnabled = !state.trEnabled;
-      localStorage.setItem('muriel_tr_enabled', String(state.trEnabled));
+      localStorage.setItem('eclipse_tr_enabled', String(state.trEnabled));
       updateLyricsTranslationUI();
       if (!state.trEnabled) {
         state.trActive = false;
@@ -13559,7 +13559,7 @@ async function fetchAndApplyTranslation() {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           state.trLang = item.code;
-          localStorage.setItem('muriel_tr_lang', state.trLang);
+          localStorage.setItem('eclipse_tr_lang', state.trLang);
           if (trLangLabel) trLangLabel.textContent = text;
           trLangMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.remove('selected'));
           btn.classList.add('selected');
@@ -13667,7 +13667,7 @@ async function fetchAndApplyTranslation() {
     uiLangList.appendChild(frag);
     showUiLang(I18N.lang);
     // also when something else switched (window.applyI18n from a plugin)
-    window.addEventListener('muriel:i18n', () => showUiLang(I18N.lang));
+    window.addEventListener('eclipse:i18n', () => showUiLang(I18N.lang));
 
     if (uiLangSearch) {
       uiLangSearch.addEventListener('click', (e) => e.stopPropagation());
@@ -13711,7 +13711,7 @@ async function fetchAndApplyTranslation() {
   if (el.btnTrAuto) {
     el.btnTrAuto.addEventListener('click', () => {
       state.trAuto = !state.trAuto;
-      localStorage.setItem('muriel_tr_auto', String(state.trAuto));
+      localStorage.setItem('eclipse_tr_auto', String(state.trAuto));
       updateLyricsTranslationUI();
       if (state.trEnabled && state.trAuto && !state.trActive) {
         state.trActive = true;
@@ -13743,7 +13743,7 @@ async function fetchAndApplyTranslation() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const val = opt.dataset.value;
-        localStorage.setItem('muriel_lyrics_ease', val);
+        localStorage.setItem('eclipse_lyrics_ease', val);
         if (lyricsEaseLabel) lyricsEaseLabel.textContent = opt.textContent;
         lyricsEaseMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o === opt));
         applyLyricsEase();
@@ -13766,7 +13766,7 @@ async function fetchAndApplyTranslation() {
     sliderLyricsSpeed.addEventListener('input', () => {
       const val = parseInt(sliderLyricsSpeed.value, 10) / 10;
       valLyricsSpeed.textContent = `${val.toFixed(1)}x`;
-      localStorage.setItem('muriel_lyrics_speed', val.toString());
+      localStorage.setItem('eclipse_lyrics_speed', val.toString());
       applyLyricsEase();
     });
   }
@@ -13793,7 +13793,7 @@ async function fetchAndApplyTranslation() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const val = opt.dataset.value;
-        localStorage.setItem('muriel_lyrics_word_style', val);
+        localStorage.setItem('eclipse_lyrics_word_style', val);
         if (lyricsWordStyleLabel) lyricsWordStyleLabel.textContent = opt.textContent;
         lyricsWordStyleMenu.querySelectorAll('.m3-dropdown-option').forEach(o => o.classList.toggle('selected', o === opt));
         lyricsWordStyleDropdown.classList.remove('open');
@@ -13817,8 +13817,8 @@ async function fetchAndApplyTranslation() {
     sliderLyricsTightness.addEventListener('input', () => {
       const val = parseInt(sliderLyricsTightness.value, 10);
       valLyricsTightness.textContent = `${val}%`;
-      localStorage.setItem('muriel_lyrics_gradient_tightness', val.toString());
-      localStorage.setItem('muriel_gradient_tight', val.toString());
+      localStorage.setItem('eclipse_lyrics_gradient_tightness', val.toString());
+      localStorage.setItem('eclipse_gradient_tight', val.toString());
       applyLyricsGradientTightness();
       updateActiveGradient();
     });
@@ -13840,12 +13840,12 @@ async function fetchAndApplyTranslation() {
 
   const toggleNormalize = document.getElementById('toggle-normalize');
   if (toggleNormalize) {
-    const isNorm = localStorage.getItem('muriel_audio_normalize') === '1';
+    const isNorm = localStorage.getItem('eclipse_audio_normalize') === '1';
     toggleNormalize.classList.toggle('active', isNorm);
     toggleNormalize.addEventListener('click', () => {
       const active = !toggleNormalize.classList.contains('active');
       toggleNormalize.classList.toggle('active', active);
-      localStorage.setItem('muriel_audio_normalize', active ? '1' : '0');
+      localStorage.setItem('eclipse_audio_normalize', active ? '1' : '0');
       if (!active) resetLevelWatcher();
     });
   }
@@ -14231,7 +14231,7 @@ async function fetchAndApplyTranslation() {
   let parsedSpotifyExport = { likes: [], playlists: [] };
   let spLoginPollTimer = null;
   let spotifyConnected = false;
-  const spotifyHeaders = { 'X-Muriel-Token': window.electronAPI?.serverToken || '' };
+  const spotifyHeaders = { 'X-Eclipse-Token': window.electronAPI?.serverToken || '' };
 
   async function checkSpotifyAuthStatus() {
     try {
@@ -14373,14 +14373,14 @@ async function fetchAndApplyTranslation() {
   }
 
   if (spClientIdInput) {
-    const savedId = localStorage.getItem('muriel_spotify_client_id') || '';
+    const savedId = localStorage.getItem('eclipse_spotify_client_id') || '';
     spClientIdInput.value = savedId;
     if (btnSpLogin) {
       btnSpLogin.disabled = !/^[a-f0-9]{32}$/i.test(savedId.trim());
     }
     spClientIdInput.addEventListener('input', () => {
       const val = spClientIdInput.value.trim();
-      localStorage.setItem('muriel_spotify_client_id', val);
+      localStorage.setItem('eclipse_spotify_client_id', val);
       if (btnSpLogin) {
         btnSpLogin.disabled = !/^[a-f0-9]{32}$/i.test(val);
       }
@@ -14561,7 +14561,7 @@ async function fetchAndApplyTranslation() {
     if (spChkLikes2) { spChkLikes2.checked = true; spChkLikes2.disabled = false; }
     if (spChkPlaylists2) { spChkPlaylists2.checked = true; spChkPlaylists2.disabled = false; }
     if (btnSpPickFiles) btnSpPickFiles.disabled = false;
-    const savedId = localStorage.getItem('muriel_spotify_client_id') || '';
+    const savedId = localStorage.getItem('eclipse_spotify_client_id') || '';
     if (spClientIdInput) spClientIdInput.value = savedId;
     if (btnSpLogin) btnSpLogin.disabled = !/^[a-f0-9]{32}$/i.test(savedId.trim());
     if (spRedirectUri) spRedirectUri.textContent = `http://127.0.0.1:${state.serverPort || 38472}/api/spotify-callback`;
@@ -14961,7 +14961,7 @@ async function fetchAndApplyTranslation() {
           finishMsg += ` Search errors: ${fs.commonError}`;
         }
       }
-      if (window.__riffLogError) window.__riffLogError('INFO', 'Import summary: ' + finishMsg);
+      if (window.__eclipseLogError) window.__eclipseLogError('INFO', 'Import summary: ' + finishMsg);
       if (spotifyStatus) {
         spotifyStatus.textContent = finishMsg;
         spotifyStatus.style.color = 'var(--md-sys-color-primary, #6750A4)';
@@ -15584,7 +15584,7 @@ async function fetchAndApplyTranslation() {
   // YouTube / YouTube Music "Log in" (desktop): the Google login lives in its own browser storage in main.js
   // (google-library.js), one per profile; this page only learns whether it is logged in and gets the songs back
   const googleApi = () => (window.electronAPI && typeof window.electronAPI.googleImportLibrary === 'function' && !window.electronAPI.isMobile ? window.electronAPI : null);
-  const googleProfile = () => (window.MurielProfiles && window.MurielProfiles.id) || 'default';
+  const googleProfile = () => (window.EclipseProfiles && window.EclipseProfiles.id) || 'default';
 
   function setLinkStatus(text, isError) {
     if (!linkImportStatus) return;
@@ -15836,7 +15836,7 @@ async function fetchAndApplyTranslation() {
         updateFavoritesBadge();
         updateFavoriteIcon();
         if (state.currentView === 'favorites') renderFavoritesView();
-        window.dispatchEvent(new Event('muriel:library'));
+        window.dispatchEvent(new Event('eclipse:library'));
       }
       const target = document.getElementById('google-import-target');
       const targetId = target ? target.value : 'new';
@@ -15865,7 +15865,7 @@ async function fetchAndApplyTranslation() {
     if (currentLinkImportMode === 'login') { await handleGoogleLoginImport(); return; }
     clearImportError(linkImportError);
     const url = linkImportUrl ? linkImportUrl.value.trim() : '';
-    if (window.MurielShare && window.MurielShare.payloadFrom(url)) { closeLinkImportModal(); importSharedPlaylist(url); return; }
+    if (window.EclipseShare && window.EclipseShare.payloadFrom(url)) { closeLinkImportModal(); importSharedPlaylist(url); return; }
     if (!url) {
       const errInfo = classifyImportError('link', 404, 'unsupported link');
       showImportError(linkImportError, errInfo);
@@ -15943,7 +15943,7 @@ async function fetchAndApplyTranslation() {
 
   let trackToDownload = null;
   let downloadBatch = null;
-  let selectedFormat = localStorage.getItem('muriel_download_format') || 'mp3';
+  let selectedFormat = localStorage.getItem('eclipse_download_format') || 'mp3';
   let selectedQuality = '0';
 
   function updateDownloadBtnLabel() {
@@ -16066,7 +16066,7 @@ async function fetchAndApplyTranslation() {
 
   function setDownloadFormat(fmt) {
     selectedFormat = fmt || 'mp3';
-    localStorage.setItem('muriel_download_format', selectedFormat);
+    localStorage.setItem('eclipse_download_format', selectedFormat);
     document.querySelectorAll('.format-chip').forEach(c => {
       c.classList.toggle('active', c.dataset.format === selectedFormat);
     });
@@ -16213,7 +16213,7 @@ async function fetchAndApplyTranslation() {
       for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
     };
 
-    writeStr(0, 'RIFF');
+    writeStr(0, 'ECLIPSE');
     view.setUint32(4, 36 + dataSize, true);
     writeStr(8, 'WAVE');
     writeStr(12, 'fmt ');
@@ -16287,7 +16287,7 @@ async function fetchAndApplyTranslation() {
           if (!data.success) throw Object.assign(new Error(data.error || 'Failed to download'), { status: res.status });
           if (data.directory) lastDir = data.directory;
         };
-        const result = tracks.length ? await window.MurielDownloadBatch.runDownloadBatch(tracks, downloadOne, {
+        const result = tracks.length ? await window.EclipseDownloadBatch.runDownloadBatch(tracks, downloadOne, {
           concurrency: 2, signal: batchAbort.signal, onProgress: setProgress,
         }) : { done: [], failed: [], aborted: batchAbort.signal.aborted };
         for (const f of result.failed) console.error('Download failed:', f.item.title || f.item.url || '', f.error && f.error.message);
@@ -16513,7 +16513,7 @@ async function fetchAndApplyTranslation() {
   const analysisCache = new Map();
   let myWaveCurrentTracks = [];
   let jumpBackCurrentTracks = [];
-  let homeMode = localStorage.getItem('muriel_home_pane') === 'recent' ? 'recent' : 'wave';
+  let homeMode = localStorage.getItem('eclipse_home_pane') === 'recent' ? 'recent' : 'wave';
   let isExtendingMyWave = false;
 
   function getCachedTrackAnalysis(trackId) {
@@ -16521,7 +16521,7 @@ async function fetchAndApplyTranslation() {
     const cleanId = String(trackId).replace(/[^a-zA-Z0-9_-]/g, '_');
     if (analysisCache.has(cleanId)) return analysisCache.get(cleanId);
     try {
-      const stored = localStorage.getItem(`muriel_audio_analysis_${cleanId}`);
+      const stored = localStorage.getItem(`eclipse_audio_analysis_${cleanId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
         analysisCache.set(cleanId, parsed);
@@ -16538,7 +16538,7 @@ async function fetchAndApplyTranslation() {
     analysisCache.set(cleanId, analysis);
     capMap(analysisCache, 300);
     try {
-      localStorage.setItem(`muriel_audio_analysis_${cleanId}`, JSON.stringify(analysis));
+      localStorage.setItem(`eclipse_audio_analysis_${cleanId}`, JSON.stringify(analysis));
       fetch(`http://127.0.0.1:${state.serverPort}/api/track-analysis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -16561,7 +16561,7 @@ async function fetchAndApplyTranslation() {
     return `${a}::${t}`;
   }
 
-  const WAVE_SKIPS_KEY = 'muriel_wave_skips';
+  const WAVE_SKIPS_KEY = 'eclipse_wave_skips';
 
   function normalizeArtistName(name) {
     return String(name || '')
@@ -17337,7 +17337,7 @@ async function fetchAndApplyTranslation() {
     if (newMode === homeMode) return;
 
     homeMode = newMode;
-    localStorage.setItem('muriel_home_pane', newMode);
+    localStorage.setItem('eclipse_home_pane', newMode);
     updateHomeDots();
 
     const isPerf = document.body.classList.contains('perf') || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -17392,7 +17392,7 @@ async function fetchAndApplyTranslation() {
 
     if (!avail.includes(homeMode)) {
       homeMode = avail[0];
-      localStorage.setItem('muriel_home_pane', homeMode);
+      localStorage.setItem('eclipse_home_pane', homeMode);
     }
 
     updateHomeDots();
@@ -17559,17 +17559,17 @@ async function fetchAndApplyTranslation() {
     }
   }
 
-  // ---- Home layout: Muriel (the carousel; the default) or Spotify-style rows (Settings > Advanced > Home layout) ----
+  // ---- Home layout: Eclipse (the carousel; the default) or Spotify-style rows (Settings > Advanced > Home layout) ----
   // The Spotify layout trades the carousel for quick picks (Liked songs, what you played last), "Made for you"
   // (My Wave and up to five Daily Mixes, new every day), Trending now and the artists you follow. Sync invite,
   // Your playlists, On repeat and For you stay below in both layouts.
   // (var: switchView can render Home before this block has run)
   var spHomeReady = false;
   function isSpotifyHome() {
-    try { return (localStorage.getItem('muriel_home_layout') || 'spotify') === 'spotify'; } catch (e) { return false; }
+    try { return (localStorage.getItem('eclipse_home_layout') || 'spotify') === 'spotify'; } catch (e) { return false; }
   }
-  const DAILY_MIXES_KEY = 'muriel_daily_mixes';
-  const TRENDING_CACHE_KEY = 'muriel_trending_cache';
+  const DAILY_MIXES_KEY = 'eclipse_daily_mixes';
+  const TRENDING_CACHE_KEY = 'eclipse_trending_cache';
   const spThumb = (t) => (t && (getTrackThumbUrl(t) || t.thumbnail || t.cover)) || '';
 
   function spCoverPlaceholder(wrap) {
@@ -17596,7 +17596,7 @@ async function fetchAndApplyTranslation() {
     } else if (cover) {
       const img = document.createElement('img');
       img.loading = 'lazy'; img.decoding = 'async'; img.alt = '';
-      // a music note instead of the broken-image icon when the cover doesn't load (from Riff 43.2)
+      // a music note instead of the broken-image icon when the cover doesn't load (from Eclipse 43.2)
       img.addEventListener('error', () => { img.remove(); spCoverPlaceholder(coverWrap); }, { once: true });
       img.src = cover;
       coverWrap.appendChild(img);
@@ -17942,7 +17942,7 @@ async function fetchAndApplyTranslation() {
   }
   const btnShowArtists = document.getElementById('btn-show-artists');
   function applyShowArtists() {
-    const show = localStorage.getItem('muriel_show_artists') === '1';
+    const show = localStorage.getItem('eclipse_show_artists') === '1';
     document.body.classList.toggle('hide-artists-tab', !show);
     const nav = document.getElementById('nav-artists');
     if (nav) nav.classList.toggle('nav-collapsed', !show);
@@ -17954,7 +17954,7 @@ async function fetchAndApplyTranslation() {
   }
   if (btnShowArtists) {
     btnShowArtists.addEventListener('click', () => {
-      localStorage.setItem('muriel_show_artists', localStorage.getItem('muriel_show_artists') === '1' ? '0' : '1');
+      localStorage.setItem('eclipse_show_artists', localStorage.getItem('eclipse_show_artists') === '1' ? '0' : '1');
       applyShowArtists();
     });
   }
@@ -17981,7 +17981,7 @@ async function fetchAndApplyTranslation() {
   }
   document.querySelectorAll('#home-layout-toggle .theme-mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      try { localStorage.setItem('muriel_home_layout', btn.dataset.layout === 'spotify' ? 'spotify' : 'muriel'); } catch (e) {}
+      try { localStorage.setItem('eclipse_home_layout', btn.dataset.layout === 'spotify' ? 'spotify' : 'eclipse'); } catch (e) {}
       applyHomeLayout();
     });
   });
@@ -18828,7 +18828,7 @@ async function fetchAndApplyTranslation() {
       if (data.progress && data.progress.status === 'downloading') {
         pollToolsStatus();
       } else if (promptUser && (!data.ytDlp || !data.ffmpeg)) {
-        if (!sessionStorage.getItem('muriel_tools_prompt_dismissed')) {
+        if (!sessionStorage.getItem('eclipse_tools_prompt_dismissed')) {
           const modal = document.getElementById('tools-install-modal');
           if (modal) openModal(modal);
         }
@@ -18863,14 +18863,14 @@ async function fetchAndApplyTranslation() {
 
   if (btnDismissToolsModal && toolsModal) {
     btnDismissToolsModal.addEventListener('click', () => {
-      sessionStorage.setItem('muriel_tools_prompt_dismissed', '1');
+      sessionStorage.setItem('eclipse_tools_prompt_dismissed', '1');
       closeModal(toolsModal);
     });
   }
 
   if (btnCloseToolsModal && toolsModal) {
     btnCloseToolsModal.addEventListener('click', () => {
-      sessionStorage.setItem('muriel_tools_prompt_dismissed', '1');
+      sessionStorage.setItem('eclipse_tools_prompt_dismissed', '1');
       closeModal(toolsModal);
     });
   }
@@ -18892,8 +18892,8 @@ async function fetchAndApplyTranslation() {
         if (typeof api.getDiagnostics === 'function') text = await api.getDiagnostics();
         else {
           // phones: no main process to ask, so the app's own details and its error log
-          const b = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {}; text = [`Eclipse ${b.version ? `v${b.version}` : ''} (${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'})`,
-            navigator.userAgent, `Language ${navigator.language}`, '--- log ---', window.MurielLog ? window.MurielLog.text() : 'no log'].join('\n');
+          const b = window.ECLIPSE_BUILD || window.ECLIPSE_BUILD || {}; text = [`Eclipse ${b.version ? `v${b.version}` : ''} (${(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform()) || 'web'})`,
+            navigator.userAgent, `Language ${navigator.language}`, '--- log ---', window.EclipseLog ? window.EclipseLog.text() : 'no log'].join('\n');
         }
       } catch (e) { text = `Diagnostics failed: ${e && e.message}`; }
       if (await copyText(text)) showToast(Tm('Diagnostics copied. Paste it into your report'), 'info');
@@ -18908,7 +18908,7 @@ async function fetchAndApplyTranslation() {
       if (typeof api.openLogsFolder === 'function') api.openLogsFolder();
       // phones have no folder to open: share the log instead
       else if (typeof api.shareText === 'function') {
-        const res = await api.shareText('Eclipse error log', window.MurielLog ? window.MurielLog.text() : 'no log');
+        const res = await api.shareText('Eclipse error log', window.EclipseLog ? window.EclipseLog.text() : 'no log');
         if (res === 'copied') showToast(Tm('Log copied to clipboard'), 'info');
       }
     });
@@ -19010,7 +19010,7 @@ async function fetchAndApplyTranslation() {
     const bannerVid = document.getElementById('track-art-banner-vid');
     const bannerPh = document.getElementById('track-art-banner-placeholder');
     const bannerStatus = document.getElementById('track-art-banner-status');
-    const activeBanner = art.banner || localStorage.getItem('muriel_banner_media') || activeCover;
+    const activeBanner = art.banner || localStorage.getItem('eclipse_banner_media') || activeCover;
     const isVideo = activeBanner && /\.(mp4|webm)($|\?)/i.test(activeBanner);
 
     if (activeBanner) {
@@ -19033,7 +19033,7 @@ async function fetchAndApplyTranslation() {
       if (bannerVid) bannerVid.style.display = 'none';
       if (bannerPh) bannerPh.style.display = 'block';
     }
-    if (bannerStatus) bannerStatus.textContent = art.banner ? 'Custom banner' : (localStorage.getItem('muriel_banner_media') ? 'Global banner' : 'Default art');
+    if (bannerStatus) bannerStatus.textContent = art.banner ? 'Custom banner' : (localStorage.getItem('eclipse_banner_media') ? 'Global banner' : 'Default art');
     renderTrackBannerFxControls(t, art);
   }
 
@@ -19236,7 +19236,7 @@ async function fetchAndApplyTranslation() {
     });
   }
 
-  // Search results: All / Songs / Artists / Albums (from Riff 43.1). Only shows or hides the sections, so the
+  // Search results: All / Songs / Artists / Albums (from Eclipse 43.1). Only shows or hides the sections, so the
   // choice stays for the next search.
   (function initSearchFilterChips() {
     const box = el.searchResultsContainer;
@@ -19254,7 +19254,7 @@ async function fetchAndApplyTranslation() {
     });
   })();
 
-  // The mouse's back button goes back like the page's own Back button (from Riff 43.1; computers)
+  // The mouse's back button goes back like the page's own Back button (from Eclipse 43.1; computers)
   (function initMouseBack() {
     if (isPhoneApp) return;
     const back = (e) => {
@@ -19290,10 +19290,10 @@ async function fetchAndApplyTranslation() {
   if (typeof m3cInit === 'function') m3cInit();
   requestAnimationFrame(() => requestAnimationFrame(() => updateNavIndicator(false)));
 
-  if (localStorage.getItem('muriel_perf_mode') === null && window.electronAPI && window.electronAPI.getGpuCompositing) {
+  if (localStorage.getItem('eclipse_perf_mode') === null && window.electronAPI && window.electronAPI.getGpuCompositing) {
     window.electronAPI.getGpuCompositing().then((status) => {
       if (status && !status.startsWith('enabled')) {
-        localStorage.setItem('muriel_perf_mode', '1');
+        localStorage.setItem('eclipse_perf_mode', '1');
         applyPerfMode(true);
         if (btnPerfMode) btnPerfMode.classList.add('active');
         showToast(Tm('Performance mode enabled: no GPU acceleration detected. You can turn it off in Settings'));
@@ -19406,7 +19406,7 @@ async function fetchAndApplyTranslation() {
     if (!state._queueRestored) return;
     try {
       const position = el.nativeAudio && Number.isFinite(el.nativeAudio.currentTime) ? el.nativeAudio.currentTime : 0;
-      localStorage.setItem('muriel_queue_state', JSON.stringify({
+      localStorage.setItem('eclipse_queue_state', JSON.stringify({
         queue: state.queue,
         queueIndex: state.queueIndex,
         currentTrack: state.currentTrack,
@@ -19424,7 +19424,7 @@ async function fetchAndApplyTranslation() {
     state._queueRestored = true;
     let saved = null;
     try {
-      saved = JSON.parse(localStorage.getItem('muriel_queue_state') || 'null');
+      saved = JSON.parse(localStorage.getItem('eclipse_queue_state') || 'null');
     } catch (e) {}
     if (!saved || !Array.isArray(saved.queue) || saved.queue.length === 0) return;
     if (state.currentTrack) return;
@@ -19465,7 +19465,7 @@ async function fetchAndApplyTranslation() {
       { label: 'Open local library', hint: 'View', run: () => switchView('local') },
       { label: 'Open queue', hint: 'View', run: () => switchView('queue') },
       { label: 'Open history', hint: 'View', run: () => switchView('history') },
-      { label: 'Eclipse Encore', hint: 'Your stats', run: () => window.MurielEncore && window.MurielEncore.open('month') },
+      { label: 'Eclipse Encore', hint: 'Your stats', run: () => window.EclipseEncore && window.EclipseEncore.open('month') },
       { label: 'Open discover', hint: 'View', run: () => switchView('discover') },
       { label: 'Open settings', hint: 'View', run: () => switchView('settings') },
       { label: 'Audio settings', hint: 'Audio', run: () => openAudioTab('tempo') },
@@ -19657,8 +19657,8 @@ async function fetchAndApplyTranslation() {
 
   if (el.btnDedupePlaylist) el.btnDedupePlaylist.addEventListener('click', removePlaylistDuplicates);
 
-  // ======================= Riff 43: player & look =======================
-  // Everything below is from Riff 43, fitted to Muriel. Variables are `var` because code above (lyrics, the
+  // ======================= Eclipse 43: player & look =======================
+  // Everything below is from Eclipse 43, fitted to Eclipse. Variables are `var` because code above (lyrics, the
   // player events) can call these functions before this part of the file has run.
 
   // ---- hide the titlebar (desktop): it slides down when the pointer touches the top edge ----
@@ -19684,10 +19684,10 @@ async function fetchAndApplyTranslation() {
       if (!on) document.body.classList.remove('titlebar-peek');
       if (btn) btn.classList.toggle('active', on);
     };
-    apply(localStorage.getItem('muriel_hide_titlebar') === '1');
+    apply(localStorage.getItem('eclipse_hide_titlebar') === '1');
     if (btn) btn.addEventListener('click', () => {
       const next = !btn.classList.contains('active');
-      localStorage.setItem('muriel_hide_titlebar', next ? '1' : '0');
+      localStorage.setItem('eclipse_hide_titlebar', next ? '1' : '0');
       apply(next);
     });
   })();
@@ -19798,13 +19798,13 @@ async function fetchAndApplyTranslation() {
     }));
     document.addEventListener('click', () => dd.classList.remove('open'));
   }
-  applyIconPack(localStorage.getItem('muriel_icon_pack') || 'material');
-  wireSettingDropdown('icon-pack', 'muriel_icon_pack', 'material', applyIconPack);
+  applyIconPack(localStorage.getItem('eclipse_icon_pack') || 'material');
+  wireSettingDropdown('icon-pack', 'eclipse_icon_pack', 'material', applyIconPack);
 
-  // ---- the icon on the Home button: the classic glyph, Muriel's app icon or one of its styles, or your own ----
+  // ---- the icon on the Home button: the classic glyph, Eclipse's app icon or one of its styles, or your own ----
   var HOME_ICONS = [
     { id: 'classic', label: 'Classic' },
-    { id: 'muriel', label: 'Eclipse', src: 'assets/icon.svg' },
+    { id: 'eclipse', label: 'Eclipse', src: 'assets/icon.svg' },
     { id: '01-default', label: 'Default' },
     { id: '02-editor', label: 'Editor' },
     { id: '03-orbit', label: 'Orbit' },
@@ -19837,7 +19837,7 @@ async function fetchAndApplyTranslation() {
     document.querySelectorAll('#app-icon-picker-grid .app-icon-option').forEach((b) => b.classList.toggle('active', b.dataset.icon === (src ? val : 'classic')));
   }
   function setHomeAppIcon(val) {
-    localStorage.setItem('muriel_app_icon', val);
+    localStorage.setItem('eclipse_app_icon', val);
     applyHomeAppIcon(val);
   }
   (function setupHomeIconPicker() {
@@ -19857,7 +19857,7 @@ async function fetchAndApplyTranslation() {
         setHomeAppIcon(url);
       });
     }
-    applyHomeAppIcon(localStorage.getItem('muriel_app_icon') || 'classic');
+    applyHomeAppIcon(localStorage.getItem('eclipse_app_icon') || 'classic');
   })();
 
   // ---- playbar visualizer: compact (right of the bar) or wide behind the bar; bars or one liquid wave ----
@@ -19869,9 +19869,9 @@ async function fetchAndApplyTranslation() {
       resizeCanvases();
       if (state.isPlaying) startVisualizers();
     };
-    applyPos(localStorage.getItem('muriel_bar_viz_pos') || 'behind');
+    applyPos(localStorage.getItem('eclipse_bar_viz_pos') || 'behind');
     if (group) group.querySelectorAll('.theme-mode-btn').forEach((b) => b.addEventListener('click', () => {
-      localStorage.setItem('muriel_bar_viz_pos', b.dataset.barVizPos);
+      localStorage.setItem('eclipse_bar_viz_pos', b.dataset.barVizPos);
       applyPos(b.dataset.barVizPos);
     }));
 
@@ -19883,14 +19883,14 @@ async function fetchAndApplyTranslation() {
       if (val) val.textContent = `${n}%`;
       if (slider && String(slider.value) !== String(n)) slider.value = n;
     };
-    applyOpacity(localStorage.getItem('muriel_bar_viz_opacity') || '22');
-    if (slider) slider.addEventListener('input', (e) => { localStorage.setItem('muriel_bar_viz_opacity', e.target.value); applyOpacity(e.target.value); });
+    applyOpacity(localStorage.getItem('eclipse_bar_viz_opacity') || '22');
+    if (slider) slider.addEventListener('input', (e) => { localStorage.setItem('eclipse_bar_viz_opacity', e.target.value); applyOpacity(e.target.value); });
 
     const btns = [document.getElementById('btn-viz-connected'), document.getElementById('btn-tvk-viz-connected')].filter(Boolean);
     const sync = () => btns.forEach((b) => b.classList.toggle('active', vizConnected));
     btns.forEach((b) => b.addEventListener('click', () => {
       vizConnected = !vizConnected;
-      localStorage.setItem('muriel_viz_connected', vizConnected ? '1' : '0');
+      localStorage.setItem('eclipse_viz_connected', vizConnected ? '1' : '0');
       sync();
     }));
     sync();
@@ -20146,7 +20146,7 @@ async function fetchAndApplyTranslation() {
   }
   (function setupMiniLyrics() {
     const btn = document.getElementById('btn-mini-lyrics');
-    const wanted = () => localStorage.getItem('muriel_mini_lyrics') === '1';
+    const wanted = () => localStorage.getItem('eclipse_mini_lyrics') === '1';
     const sync = () => {
       const on = document.body.classList.contains('mini') && wanted();
       document.body.classList.toggle('mini-lyrics-on', on);
@@ -20161,7 +20161,7 @@ async function fetchAndApplyTranslation() {
     sync();
     if (btn) btn.addEventListener('click', async () => {
       const next = !wanted();
-      localStorage.setItem('muriel_mini_lyrics', next ? '1' : '0');
+      localStorage.setItem('eclipse_mini_lyrics', next ? '1' : '0');
       if (window.electronAPI && window.electronAPI.setMiniLyrics) {
         try { await window.electronAPI.setMiniLyrics(next); } catch (e) {}
       }
@@ -20173,7 +20173,7 @@ async function fetchAndApplyTranslation() {
   // Settings > Tracks > Song radio shows or hides its buttons (on unless turned off).
   const songRadio = { current: null, nextId: 1 };
   function songRadioEnabled() {
-    try { return localStorage.getItem('muriel_song_radio') !== '0'; } catch (e) { return true; }
+    try { return localStorage.getItem('eclipse_song_radio') !== '0'; } catch (e) { return true; }
   }
   function radioSeedOf(t) {
     return { id: t.id || '', title: t.title || '', artist: t.artist || '', platform: t.platform || 'youtube' };
@@ -20275,7 +20275,7 @@ async function fetchAndApplyTranslation() {
     label.hidden = false;
     I18N.text(label.querySelector('.queue-radio-text'), r.label);
   }
-  window.addEventListener('muriel:queue', () => {
+  window.addEventListener('eclipse:queue', () => {
     renderSongRadioLabel();
     if (activeSongRadio()) extendSongRadio();
   });
@@ -20288,7 +20288,7 @@ async function fetchAndApplyTranslation() {
     };
     if (toggle) {
       toggle.addEventListener('click', () => {
-        try { localStorage.setItem('muriel_song_radio', songRadioEnabled() ? '0' : '1'); } catch (e) {}
+        try { localStorage.setItem('eclipse_song_radio', songRadioEnabled() ? '0' : '1'); } catch (e) {}
         apply();
       });
     }
@@ -20302,7 +20302,7 @@ async function fetchAndApplyTranslation() {
     }
   })();
 
-  // ---- share the playing song: a one-song Muriel link, the same kind playlists use ----
+  // ---- share the playing song: a one-song Eclipse link, the same kind playlists use ----
   (function setupPlaybarShare() {
     const btn = document.getElementById('btn-playbar-share');
     if (!btn) return;
@@ -20315,13 +20315,13 @@ async function fetchAndApplyTranslation() {
   })();
 
   // ---- lyrics source (LRCLIB or Genius first) and word timings for word-by-word karaoke ----
-  function lyricsSourcePref() { return localStorage.getItem('muriel_lyrics_source') || 'lrclib'; }
+  function lyricsSourcePref() { return localStorage.getItem('eclipse_lyrics_source') || 'lrclib'; }
   var CJK_WORD = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
   // the words to show for a line, with their times when the line has them (null: no times)
   function lineTimedWords(line) {
-    if (!line || !Array.isArray(line.words) || !line.words.length || !window.MurielLyricsSources) return null;
+    if (!line || !Array.isArray(line.words) || !line.words.length || !window.EclipseLyricsSources) return null;
     if (line._timedFor !== line.words) {
-      line._timed = window.MurielLyricsSources.timedWords(line.text, line.words);
+      line._timed = window.EclipseLyricsSources.timedWords(line.text, line.words);
       line._timedFor = line.words;
     }
     return line._timed;
@@ -20341,8 +20341,8 @@ async function fetchAndApplyTranslation() {
   }
   var wordsSessionCache = new Map();
   async function fetchAndUpgradeWords(title, artist, token) {
-    const source = localStorage.getItem('muriel_word_source') || 'auto';
-    const S = window.MurielLyricsSources;
+    const source = localStorage.getItem('eclipse_word_source') || 'auto';
+    const S = window.EclipseLyricsSources;
     if (source === 'estimate' || !S || state.isCustomLyrics || !getAdv('online_lyrics', true)) return;
     // only word-by-word karaoke uses them: no lookup for line mode
     if (state.lyricsMode !== 'word' || !getAdv('karaoke_words', true)) return;
@@ -20374,7 +20374,7 @@ async function fetchAndApplyTranslation() {
       const ok = data.lines.filter((wl) => lines.some((l) => S.lineSimilarity(l.text, wl.text) >= 0.6)).length / data.lines.length >= 0.6;
       if (!ok) return;
       state.syncedLyrics = data.lines.map((l) => ({ time: l.start, text: l.text, words: l.words }));
-      window.dispatchEvent(new Event('muriel:lyrics'));
+      window.dispatchEvent(new Event('eclipse:lyrics'));
       if (el.lyricsStatus) el.lyricsStatus.textContent = 'Synced';
       if (state.trActive) fetchAndApplyTranslation();
     }
@@ -20383,8 +20383,8 @@ async function fetchAndApplyTranslation() {
     if (el.nativeAudio) updateSyncedLyricsHighlight(el.nativeAudio.currentTime || 0);
   }
   var reloadLyrics = () => { if (state.currentTrack) loadSyncedLyrics(state.currentTrack.title, state.currentTrack.artist, state.loadToken); };
-  wireSettingDropdown('lyrics-source', 'muriel_lyrics_source', 'lrclib', reloadLyrics);
-  wireSettingDropdown('word-source', 'muriel_word_source', 'auto', reloadLyrics);
+  wireSettingDropdown('lyrics-source', 'eclipse_lyrics_source', 'lrclib', reloadLyrics);
+  wireSettingDropdown('word-source', 'eclipse_word_source', 'auto', reloadLyrics);
 
   const LYRICS_SOURCES = ['custom', 'lrclib', 'synclrc', 'zingmp3', 'nhaccuatui', 'genius', 'musixmatch', 'netease', 'kugou'];
   const LYRICS_SOURCE_NAMES = { custom: 'Custom', lrclib: 'LRCLIB', synclrc: 'SyncLRC', zingmp3: 'Zing MP3', nhaccuatui: 'NhacCuaTui', genius: 'Genius', musixmatch: 'Musixmatch', netease: 'NetEase', kugou: 'KuGou' };
@@ -20393,10 +20393,10 @@ async function fetchAndApplyTranslation() {
   if (btnCycleSource) {
     btnCycleSource.addEventListener('click', (e) => {
       e.stopPropagation();
-      const cur = localStorage.getItem('muriel_lyrics_source') || 'lrclib';
+      const cur = localStorage.getItem('eclipse_lyrics_source') || 'lrclib';
       const idx = LYRICS_SOURCES.indexOf(cur);
       const next = LYRICS_SOURCES[(idx + 1) % LYRICS_SOURCES.length];
-      localStorage.setItem('muriel_lyrics_source', next);
+      localStorage.setItem('eclipse_lyrics_source', next);
       const pill = el.lyricsProviderPill || document.getElementById('lyrics-provider-pill');
       if (pill) pill.textContent = LYRICS_SOURCE_NAMES[next] || next.toUpperCase();
       const sourceLabel = document.getElementById('lyrics-source-label');
@@ -20418,10 +20418,10 @@ async function fetchAndApplyTranslation() {
   (function setupStreamTimeout() {
     const slider = document.getElementById('slider-stream-timeout');
     const val = document.getElementById('val-stream-timeout');
-    const seconds = () => Math.max(5, Math.min(30, parseInt(localStorage.getItem('muriel_stream_timeout') || '12', 10) || 12));
+    const seconds = () => Math.max(5, Math.min(30, parseInt(localStorage.getItem('eclipse_stream_timeout') || '12', 10) || 12));
     const show = () => { if (val) val.textContent = `${seconds()}s`; if (slider) slider.value = seconds(); };
     show();
-    if (slider) slider.addEventListener('input', (e) => { localStorage.setItem('muriel_stream_timeout', e.target.value); show(); });
+    if (slider) slider.addEventListener('input', (e) => { localStorage.setItem('eclipse_stream_timeout', e.target.value); show(); });
     const audio = el.nativeAudio;
     if (!audio) return;
     // checked once a second while a song with a source is loading; anything new buffered counts as progress
@@ -20489,9 +20489,9 @@ async function fetchAndApplyTranslation() {
     if (!toggle || !box) return;
     // a song without its own effects starts from the ones in Settings
     const global = {
-      blur: parseInt(localStorage.getItem('muriel_banner_blur') || '3', 10),
-      opacity: parseInt(localStorage.getItem('muriel_banner_opacity') || '100', 10),
-      fade: parseInt(localStorage.getItem('muriel_banner_fade') || '100', 10),
+      blur: parseInt(localStorage.getItem('eclipse_banner_blur') || '3', 10),
+      opacity: parseInt(localStorage.getItem('eclipse_banner_opacity') || '100', 10),
+      fade: parseInt(localStorage.getItem('eclipse_banner_fade') || '100', 10),
     };
     const fx = (art && art.bannerFx) || {};
     const cur = { blur: fx.blur !== undefined ? fx.blur : global.blur, opacity: fx.opacity !== undefined ? fx.opacity : global.opacity, fade: fx.fade !== undefined ? fx.fade : global.fade };
@@ -20528,7 +20528,7 @@ async function fetchAndApplyTranslation() {
   var TRIM_BARS = 84;
   var trimPeaks = new Map();
   function allTrackTrims() {
-    if (!trackTrims) trackTrims = safeJson('muriel_track_trims', {}) || {};
+    if (!trackTrims) trackTrims = safeJson('eclipse_track_trims', {}) || {};
     return trackTrims;
   }
   function getTrackTrim(track) {
@@ -20540,15 +20540,15 @@ async function fetchAndApplyTranslation() {
     if (!id) return;
     const all = allTrackTrims();
     if (trim) all[id] = { ...trim, updatedAt: Date.now() }; else delete all[id];
-    localStorage.setItem('muriel_track_trims', JSON.stringify(all));
+    localStorage.setItem('eclipse_track_trims', JSON.stringify(all));
   }
-  window.addEventListener('storage', (e) => { if (!e.key || /muriel_track_trims$/.test(e.key)) trackTrims = null; });
+  window.addEventListener('storage', (e) => { if (!e.key || /eclipse_track_trims$/.test(e.key)) trackTrims = null; });
   // called on every timeupdate: before the kept part, jump to it; after it, the song is over
   function enforceTrackTrim() {
     const a = el.nativeAudio;
-    if (!a || !state.currentTrack || isDraggingScrubber || !window.MurielTrim) return false;
+    if (!a || !state.currentTrack || isDraggingScrubber || !window.EclipseTrim) return false;
     const trim = getTrackTrim(state.currentTrack);
-    const action = window.MurielTrim.trimAction(trim, a.currentTime);
+    const action = window.EclipseTrim.trimAction(trim, a.currentTime);
     if (action === 'start') { a.currentTime = trim.start; return true; }
     if (action !== 'end' || a.paused) return false;
     if (state.isRepeat) { a.currentTime = trim.start; return true; }
@@ -20565,8 +20565,8 @@ async function fetchAndApplyTranslation() {
   if (el.nativeAudio) {
     // a trimmed song starts at its trim
     const toTrimStart = () => {
-      const trim = state.currentTrack && window.MurielTrim ? getTrackTrim(state.currentTrack) : null;
-      if (window.MurielTrim && window.MurielTrim.trimAction(trim, el.nativeAudio.currentTime) === 'start') el.nativeAudio.currentTime = trim.start;
+      const trim = state.currentTrack && window.EclipseTrim ? getTrackTrim(state.currentTrack) : null;
+      if (window.EclipseTrim && window.EclipseTrim.trimAction(trim, el.nativeAudio.currentTime) === 'start') el.nativeAudio.currentTime = trim.start;
     };
     el.nativeAudio.addEventListener('loadedmetadata', toTrimStart);
     el.nativeAudio.addEventListener('play', toTrimStart);
@@ -20593,8 +20593,8 @@ async function fetchAndApplyTranslation() {
     if (saved) {
       const s = document.getElementById('trim-start');
       const e = document.getElementById('trim-end');
-      if (s) s.value = window.MurielTrim.formatPreciseTime(trimDraft.start);
-      if (e) e.value = window.MurielTrim.formatPreciseTime(trimDraft.end);
+      if (s) s.value = window.EclipseTrim.formatPreciseTime(trimDraft.start);
+      if (e) e.value = window.EclipseTrim.formatPreciseTime(trimDraft.end);
     }
   }
   function sizeTrimCanvas() {
@@ -20611,7 +20611,7 @@ async function fetchAndApplyTranslation() {
   function trimWavePeaks(track) {
     const id = getTrackCanonicalId(track);
     if (trimPeaks.has(id)) return trimPeaks.get(id);
-    const peaks = window.MurielTrim.placeholderPeaks(id, TRIM_BARS);
+    const peaks = window.EclipseTrim.placeholderPeaks(id, TRIM_BARS);
     trimPeaks.set(id, peaks);
     if (trimPeaks.size > 30) trimPeaks.delete(trimPeaks.keys().next().value);
     (async () => {
@@ -20631,7 +20631,7 @@ async function fetchAndApplyTranslation() {
         const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
         if (!Offline) return;
         const audio = await new Offline(1, 1, 8000).decodeAudioData(buf);
-        trimPeaks.set(id, window.MurielTrim.wavePeaks(audio.getChannelData(0), TRIM_BARS));
+        trimPeaks.set(id, window.EclipseTrim.wavePeaks(audio.getChannelData(0), TRIM_BARS));
         if (trackToDownload && getTrackCanonicalId(trackToDownload) === id) renderTrimWave();
       } catch (e) {}
     })();
@@ -20663,7 +20663,7 @@ async function fetchAndApplyTranslation() {
     }
   }
   function updateTrimmerUI() {
-    const T = window.MurielTrim;
+    const T = window.EclipseTrim;
     if (!T) return;
     const dur = Math.max(1, trimDraft.dur);
     const startPct = (trimDraft.start / dur) * 100;
@@ -20693,7 +20693,7 @@ async function fetchAndApplyTranslation() {
     document.querySelectorAll('.dl-mode-tab').forEach((tab) => tab.addEventListener('click', () => showDownloadPane(tab.dataset.dlTab)));
     const stage = document.getElementById('capcut-wave-stage');
     if (!stage) return;
-    const minKeep = window.MurielTrim ? window.MurielTrim.MIN_KEEP : 1;
+    const minKeep = window.EclipseTrim ? window.EclipseTrim.MIN_KEEP : 1;
     const ratioAt = (e) => { const r = stage.getBoundingClientRect(); return r.width ? Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) : 0; };
     const dragHandle = (handle, side) => {
       if (!handle) return;
@@ -20726,10 +20726,10 @@ async function fetchAndApplyTranslation() {
     const btnReset = document.getElementById('btn-cc-reset');
     if (btnSave) btnSave.addEventListener('click', () => {
       if (!trackToDownload) return;
-      const trim = window.MurielTrim.normalizeTrim(trimDraft.start, trimDraft.end, trimDraft.dur);
+      const trim = window.EclipseTrim.normalizeTrim(trimDraft.start, trimDraft.end, trimDraft.dur);
       saveTrackTrim(trackToDownload, trim);
       if (btnReset) btnReset.classList.toggle('hidden', !trim);
-      const T = window.MurielTrim;
+      const T = window.EclipseTrim;
       showToast(trim ? `Trim saved: ${T.formatPreciseTime(trim.start)} – ${T.formatPreciseTime(trim.end)}` : 'That keeps the whole song, so there is no trim', trim ? 'success' : 'info');
       if (trim) {
         const s = document.getElementById('trim-start');
@@ -20756,15 +20756,15 @@ async function fetchAndApplyTranslation() {
       if (pane && !pane.classList.contains('hidden') && el.downloadModal && !el.downloadModal.classList.contains('hidden')) updateTrimPlayhead();
     });
   })();
-  // ======================= end of Riff 43: player & look =======================
+  // ======================= end of Eclipse 43: player & look =======================
 
   restoreQueueState();
 
   emitPluginEvent('ready');
 
   // ---- Core API for the iPhone interface (mobile/ui), which draws its own screens on this engine ----
-  const savePlaylists = () => { localStorage.setItem('devsize_playlists', JSON.stringify(state.playlists)); renderPlaylistsList(); window.dispatchEvent(new Event('muriel:library')); };
-  window.EclipseCore = window.MurielCore = {
+  const savePlaylists = () => { localStorage.setItem('devsize_playlists', JSON.stringify(state.playlists)); renderPlaylistsList(); window.dispatchEvent(new Event('eclipse:library')); };
+  window.EclipseCore = window.EclipseCore = {
     state,
     audio: el.nativeAudio,
     base: () => `http://127.0.0.1:${state.serverPort}`,
@@ -20777,7 +20777,7 @@ async function fetchAndApplyTranslation() {
     toggleShuffle: () => { if (el.btnShuffle) el.btnShuffle.click(); return state.isShuffle; },
     toggleRepeat: () => { if (el.btnRepeat) el.btnRepeat.click(); return state.repeatMode; },
     isFavorite: (t) => state.favorites.some((f) => isSameSong(f, t)),
-    toggleFavorite: (t) => { toggleFavoriteTrack(t); window.dispatchEvent(new Event('muriel:library')); return state.favorites.some((f) => isSameSong(f, t)); },
+    toggleFavorite: (t) => { toggleFavoriteTrack(t); window.dispatchEvent(new Event('eclipse:library')); return state.favorites.some((f) => isSameSong(f, t)); },
     createPlaylist(name, tracks = []) {
       if (!name || !name.trim()) return null;
       const pl = { id: 'pl_' + Date.now(), name: name.trim(), tracks: tracks.slice() };
@@ -20799,9 +20799,9 @@ async function fetchAndApplyTranslation() {
       const at = Math.max(0, state.queueIndex + 1);
       state.queue.splice(at, 0, track);
       updateQueueBadge();
-      window.dispatchEvent(new Event('muriel:queue'));
+      window.dispatchEvent(new Event('eclipse:queue'));
     },
-    addToQueue(track) { state.queue.push(track); updateQueueBadge(); window.dispatchEvent(new Event('muriel:queue')); },
+    addToQueue(track) { state.queue.push(track); updateQueueBadge(); window.dispatchEvent(new Event('eclipse:queue')); },
     isSameTrack: (a, b) => isSameTrack(a, b),
     formatDuration: (s) => formatDuration(s),
     toast: (msg, kind) => showToast(msg, kind),
@@ -20812,7 +20812,7 @@ async function fetchAndApplyTranslation() {
     importPlaylist(name, tracks, { cover = '', description = '' } = {}) {
       const pl = createPlaylist(name, tracks || [], cover, { open: false });
       if (pl && description) { pl.description = description; localStorage.setItem('devsize_playlists', JSON.stringify(state.playlists)); }
-      if (pl) window.dispatchEvent(new Event('muriel:library'));
+      if (pl) window.dispatchEvent(new Event('eclipse:library'));
       return pl;
     },
     openPlaylist: (id) => openPlaylistDetail(id),
@@ -20840,41 +20840,41 @@ async function fetchAndApplyTranslation() {
         if (state.currentView === 'history') renderHistoryView();
       }
       // saved albums and followed artists from another device
-      if (has('muriel_saved_albums')) {
+      if (has('eclipse_saved_albums')) {
         updateAlbumsCount();
         if (state.currentView === 'albums') renderSavedAlbums();
         if (state.currentView === 'album') updateSaveAlbumButton();
       }
-      if (has('muriel_followed_artists')) {
+      if (has('eclipse_followed_artists')) {
         renderFollowedArtists();
         if (state.currentView === 'artist') updateFollowButton();
       }
-      if (['muriel_theme_mode', 'muriel_theme_accent', 'muriel_theme_intensity', 'muriel_theme_brightness', 'muriel_palette_style'].some(has)) {
-        state.themeMode = localStorage.getItem('muriel_theme_mode') || 'dark';
-        state.themeAccent = localStorage.getItem('muriel_theme_accent') || '#6750A4';
-        state.themeIntensity = parseInt(localStorage.getItem('muriel_theme_intensity') || '0', 10);
-        state.themeBrightness = parseInt(localStorage.getItem('muriel_theme_brightness') || '50', 10);
-        state.paletteStyle = localStorage.getItem('muriel_palette_style') || 'classic';
+      if (['eclipse_theme_mode', 'eclipse_theme_accent', 'eclipse_theme_intensity', 'eclipse_theme_brightness', 'eclipse_palette_style'].some(has)) {
+        state.themeMode = localStorage.getItem('eclipse_theme_mode') || 'dark';
+        state.themeAccent = localStorage.getItem('eclipse_theme_accent') || '#6750A4';
+        state.themeIntensity = parseInt(localStorage.getItem('eclipse_theme_intensity') || '0', 10);
+        state.themeBrightness = parseInt(localStorage.getItem('eclipse_theme_brightness') || '50', 10);
+        state.paletteStyle = localStorage.getItem('eclipse_palette_style') || 'classic';
         updateThemeFromState();
       }
-      if (has('muriel_font')) {
-        state.riffFont = localStorage.getItem('muriel_font') || 'google';
-        applyFont(state.riffFont);
+      if (has('eclipse_font')) {
+        state.eclipseFont = localStorage.getItem('eclipse_font') || 'google';
+        applyFont(state.eclipseFont);
       }
-      if (has('muriel_track_trims')) trackTrims = null;
-      if (has('muriel_icon_pack')) applyIconPack(localStorage.getItem('muriel_icon_pack') || 'material');
-      if (has('muriel_adv_intensity_bg')) updateThemeFromState();
-      if (has('eclipse_ui_lang') || has('muriel_ui_lang')) {
-        const syncedLang = localStorage.getItem('eclipse_ui_lang') || localStorage.getItem('muriel_ui_lang') || 'en';
-        if (window.MurielI18n && window.MurielI18n.lang !== syncedLang) {
-          window.MurielI18n.setLang(syncedLang);
+      if (has('eclipse_track_trims')) trackTrims = null;
+      if (has('eclipse_icon_pack')) applyIconPack(localStorage.getItem('eclipse_icon_pack') || 'material');
+      if (has('eclipse_adv_intensity_bg')) updateThemeFromState();
+      if (has('eclipse_ui_lang') || has('eclipse_ui_lang')) {
+        const syncedLang = localStorage.getItem('eclipse_ui_lang') || localStorage.getItem('eclipse_ui_lang') || 'en';
+        if (window.EclipseI18n && window.EclipseI18n.lang !== syncedLang) {
+          window.EclipseI18n.setLang(syncedLang);
         }
       }
-      if (keys.some((k) => k === 'devsize_playlists' || k === 'devsize_favorites')) window.dispatchEvent(new Event('muriel:library'));
+      if (keys.some((k) => k === 'devsize_playlists' || k === 'devsize_favorites')) window.dispatchEvent(new Event('eclipse:library'));
     },
   };
   window.dispatchEvent(new Event('eclipse:ready'));
-  window.dispatchEvent(new Event('muriel:ready'));
+  window.dispatchEvent(new Event('eclipse:ready'));
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -21233,7 +21233,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (info && info.id) {
             if (info.id === 'com.spotify.music' || info.id.includes('vivo')) {
               flavor = 'vivo';
-            } else if (info.id.includes('eclipse') || info.id.includes('muriel')) {
+            } else if (info.id.includes('eclipse') || info.id.includes('eclipse')) {
               flavor = 'standard';
             }
           }

@@ -3,12 +3,12 @@
 // JSON button under "Create playlist". What goes in and what is let back in is in backup-core.js.
 // Files are saved with the desktop save dialog, or handed to the share sheet on phones (electronAPI.saveTextFile).
 (function () {
-  const B = window.MurielBackup;
+  const B = window.EclipseBackup;
   if (!B) return;
   const $ = (id) => document.getElementById(id);
   let core = null;
   const toast = (m, kind) => { try { core && core.toast(m, kind || 'info'); } catch (e) {} };
-  const P = () => window.MurielProfiles || null;
+  const P = () => window.EclipseProfiles || null;
   const isDevice = (k) => { const p = P(); return p && p.isDevice ? p.isDevice(k) : false; };
 
   async function appVersion() {
@@ -150,14 +150,14 @@
     if (!c.keys) { toast('That backup has nothing Eclipse can restore', 'error'); return; }
     const me = P() ? P().current().name : '';
     const what = [`${c.playlists} playlist${c.playlists === 1 ? '' : 's'}`, `${c.favorites} favorite${c.favorites === 1 ? '' : 's'}`];
-    const from = backup.source === 'riff' ? 'this Riff account' : (backup.profileName ? `the backup of "${backup.profileName}"` : 'this backup');
-    const linked = (() => { try { return !!localStorage.getItem('muriel_sync_group'); } catch (e) { return false; } })();
+    const from = backup.source === 'riff' ? 'this Eclipse account' : (backup.profileName ? `the backup of "${backup.profileName}"` : 'this backup');
+    const linked = (() => { try { return !!localStorage.getItem('eclipse_sync_group'); } catch (e) { return false; } })();
     const ok = window.confirm(`Restore ${from} (${what.join(', ')}) into ${me ? `the profile "${me}"` : 'Eclipse'}?\n\nIts playlists, favorites, history and settings are replaced by the backup's.${linked ? ' Devices this profile syncs with get the restored ones too.' : ''} Eclipse restarts afterwards.`);
     if (!ok) return;
     // stop what would save over the restored keys while the page goes away
     try { if (core.state && core.state.isPlaying) core.togglePlay(); if (core.audio) core.audio.pause(); } catch (e) {}
     try { if (core.state) core.state._queueRestored = false; } catch (e) {}
-    try { if (window.MurielSync && window.MurielSync.stop) window.MurielSync.stop(); } catch (e) {}
+    try { if (window.EclipseSync && window.EclipseSync.stop) window.EclipseSync.stop(); } catch (e) {}
     const entries = backup.entries;
     const apply = () => {
       for (const [k] of ownEntries()) {
@@ -175,7 +175,7 @@
   }
 
   function hook() {
-    core = window.MurielCore;
+    core = window.EclipseCore;
     if (!core) return;
     const on = (id, fn) => { const b = $(id); if (b) b.addEventListener('click', fn); };
     on('btn-export-playlist', exportCurrent);
@@ -194,6 +194,6 @@
     if (hint && P() && P().list().length > 1) hint.textContent = `${P().current().name}: playlists, favorites, history, Encore and settings in one file`;
   }
 
-  if (window.MurielCore) hook();
-  else window.addEventListener('muriel:ready', hook, { once: true });
+  if (window.EclipseCore) hook();
+  else window.addEventListener('eclipse:ready', hook, { once: true });
 })();

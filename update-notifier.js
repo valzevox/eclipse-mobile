@@ -1,7 +1,7 @@
 // Eclipse Auto-Update Notifier & Markdown Changelog Viewer
 // Checks GitHub Releases (valzevox/eclipse-mobile) for newer semantic version vX.Y.Z
 (() => {
-  const build = window.ECLIPSE_BUILD || window.MURIEL_BUILD || {};
+  const build = window.ECLIPSE_BUILD || window.ECLIPSE_BUILD || {};
   const REPO = build.repo || 'valzevox/eclipse-mobile';
   const CURRENT_VER = String(build.version || '1.0.8').replace(/^v/i, '');
   const CHECK_EVERY = 30 * 60 * 1000;
@@ -110,7 +110,7 @@
     if (!rel) return null;
     const tag = String(rel.tag_name || '').trim();
     const body = String(rel.body || '');
-    const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i) || body.match(/muriel-version:\s*([0-9][\w.-]*)/i);
+    const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i);
     const remoteVer = verMatch ? verMatch[1] : tag.replace(/^v/i, '');
     const newerVer = remoteVer && /^\d+\.\d+/.test(remoteVer) && isNewerVer(remoteVer, CURRENT_VER);
     if (!newerVer) return null;
@@ -132,8 +132,8 @@
   }
 
   function openExternal(url) {
-    if (window.MurielNative && typeof window.MurielNative.openUrl === 'function') {
-      window.MurielNative.openUrl(url);
+    if (window.EclipseNative && typeof window.EclipseNative.openUrl === 'function') {
+      window.EclipseNative.openUrl(url);
       return;
     }
     window.open(url, '_system');
@@ -187,12 +187,12 @@
       const bar = modalEl.querySelector('#eclipse-upd-bar');
       const statusTxt = modalEl.querySelector('#eclipse-upd-status-text');
       const pctTxt = modalEl.querySelector('#eclipse-upd-pct-text');
-      if (window.MurielNative && typeof window.MurielNative.downloadAndInstall === 'function' && String(update.url || '').endsWith('.apk')) {
+      if (window.EclipseNative && typeof window.EclipseNative.downloadAndInstall === 'function' && String(update.url || '').endsWith('.apk')) {
         goBtn.disabled = true;
         goBtn.style.opacity = '0.5';
         if (laterBtn) laterBtn.style.display = 'none';
         progWrap.style.display = 'flex';
-        window.MurielNative.downloadAndInstall(update.url, (p) => {
+        window.EclipseNative.downloadAndInstall(update.url, (p) => {
           const pct = Math.max(0, Math.min(100, (p && p.percent) || 0));
           if (bar) bar.style.width = pct + '%';
           if (pctTxt) pctTxt.textContent = pct + '%';
@@ -307,5 +307,5 @@
       if (Date.now() - last > CHECK_EVERY) check(false);
     }
   });
-  window.MurielUpdates = { check: () => check(true) };
+  window.EclipseUpdates = { check: () => check(true) };
 })();
