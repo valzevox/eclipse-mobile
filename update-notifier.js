@@ -1,7 +1,7 @@
 // Eclipse Auto-Update Notifier & Markdown Changelog Viewer
 // Checks GitHub Releases (valzevox/eclipse-mobile) for newer semantic version vX.Y.Z
 (() => {
-  const build = window.ECLIPSE_BUILD || window.ECLIPSE_BUILD || {};
+  const build = window.ECLIPSE_BUILD || {};
   const REPO = build.repo || 'valzevox/eclipse-mobile';
   const CURRENT_VER = String(build.version || '1.0.8').replace(/^v/i, '');
   const CHECK_EVERY = 30 * 60 * 1000;
@@ -110,7 +110,7 @@
     if (!rel) return null;
     const tag = String(rel.tag_name || '').trim();
     const body = String(rel.body || '');
-    const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i);
+    const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i);
     const remoteVer = verMatch ? verMatch[1] : tag.replace(/^v/i, '');
     const newerVer = remoteVer && /^\d+\.\d+/.test(remoteVer) && isNewerVer(remoteVer, CURRENT_VER);
     if (!newerVer) return null;
