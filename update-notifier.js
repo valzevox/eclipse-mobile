@@ -123,6 +123,11 @@
         queue: window.currentQueue || []
       };
       localStorage.setItem('eclipse_playback_resume', JSON.stringify(state));
+
+      // Native commit() to disk via SharedPreferences (Spec v3)
+      if (window.EclipseNative && typeof window.EclipseNative.persistPlaybackStateSync === 'function') {
+        window.EclipseNative.persistPlaybackStateSync(state);
+      }
     } catch (_) {}
   }
 
@@ -135,6 +140,7 @@
     const isChangelogOnly = !!options.isChangelogOnly;
     const isBlocked = !!options.isBlocked;
     const isMandatory = !!options.isMandatory;
+    const isNoSafeTarget = !!options.isNoSafeTarget;
 
     let title = "Update Available";
     let subtitle = "Eclipse v" + update.version + " &bull; Latest Build";
@@ -144,6 +150,10 @@
       title = "What's New in Eclipse";
       subtitle = "Eclipse v" + update.version + " &bull; Just Updated";
       actionBtnText = 'Got it';
+    } else if (isNoSafeTarget) {
+      title = "Cảnh Báo Thu Hồi Bản Phát Hành";
+      subtitle = "Phiên bản hiện tại (v" + CURRENT_VER + ") đã bị thu hồi";
+      actionBtnText = 'Đã Hiểu';
     } else if (isBlocked) {
       title = "Cảnh Báo Phiên Bản Lỗi";
       subtitle = "Bản hiện tại (v" + CURRENT_VER + ") đã bị thu hồi do lỗi nghiêm trọng.";
@@ -188,7 +198,7 @@
 
     const goBtn = modalEl.querySelector('#eclipse-upd-go');
     goBtn.addEventListener('click', async () => {
-      if (isChangelogOnly) {
+      if (isChangelogOnly || isNoSafeTarget) {
         modalEl.remove();
         modalEl = null;
         return;
@@ -271,7 +281,22 @@
 
     // 1. Check if current version is in blocked list
     const blockedList = Array.isArray(manifest.blocked) ? manifest.blocked : [];
-    if (blockedList.includes(CURRENT_VER)) {
+    const isCurrentBlocked = blockedList.includes(CURRENT_VER);
+    const isTargetBlocked = blockedList.includes(manifest.version);
+
+    // Case: Both current and target versions are blocked -> no safe target
+    if (isCurrentBlocked && isTargetBlocked) {
+      setStatus('Bản vá đang được chuẩn bị');
+      showUpdateModal({
+        version: CURRENT_VER,
+        notes: '### Cảnh Báo Bản Thu Hồi\n\nPhiên bản hiện tại gặp lỗi nghiêm trọng đã bị thu hồi. Bản vá đang được chuẩn bị, vui lòng quay lại sau.',
+        page: manifest.page || ('https://github.com/' + REPO + '/releases')
+      }, { isNoSafeTarget: true });
+      return;
+    }
+
+    // Case 1: Current version is revoked/blocked
+    if (isCurrentBlocked) {
       setStatus('Phiên bản v' + CURRENT_VER + ' bị thu hồi');
       showUpdateModal({
         version: manifest.version,
@@ -295,7 +320,7 @@
     }
 
     // 3. Target version in blocked list guard
-    if (blockedList.includes(manifest.version)) {
+    if (isTargetBlocked) {
       setStatus("You're up to date (v" + CURRENT_VER + ')');
       return;
     }

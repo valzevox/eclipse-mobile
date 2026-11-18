@@ -8,6 +8,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.Signature;
@@ -398,6 +399,24 @@ public class MediaControlsPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    @PluginMethod
+    public void persistPlaybackStateSync(PluginCall call) {
+        try {
+            Context context = getContext();
+            SharedPreferences prefs = context.getSharedPreferences("eclipse_playback", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            String stateJson = call.getString("state", "{}");
+            editor.putString("resume_state", stateJson);
+            editor.putLong("saved_at", System.currentTimeMillis());
+            boolean committed = editor.commit(); // synchronous commit directly to disk before installer kill
+            JSObject res = new JSObject();
+            res.put("ok", committed);
+            call.resolve(res);
+        } catch (Exception e) {
+            call.reject("failed to persist playback state: " + e.getMessage());
+        }
+    }
+
     private void verifyApkSecurity(Context context, java.io.File apkFile) throws Exception {
         PackageManager pm = context.getPackageManager();
         PackageInfo archiveInfo = pm.getPackageArchiveInfo(
@@ -483,12 +502,6 @@ public class MediaControlsPlugin extends Plugin {
         String urlString = call.getString("url", "");
         if (urlString == null || urlString.isEmpty()) {
             call.reject("no url");
-            return;
-        }
-
-        // Playback guard: refuse silent install interrupt if music is playing
-        if (PlaybackService.running) {
-            call.reject("PLAYBACK_ACTIVE");
             return;
         }
 
@@ -587,12 +600,6 @@ public class MediaControlsPlugin extends Plugin {
         String filePath = call.getString("filePath", "");
         if (filePath == null || filePath.isEmpty()) {
             call.reject("no filePath");
-            return;
-        }
-
-        // Playback guard: refuse silent install interrupt if music is playing
-        if (PlaybackService.running) {
-            call.reject("PLAYBACK_ACTIVE");
             return;
         }
 
