@@ -9,6 +9,9 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaScannerConnection;
@@ -388,12 +391,107 @@ public class MediaControlsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void isPlaybackRunning(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("running", PlaybackService.running);
+        ret.put("playing", playing);
+        call.resolve(ret);
+    }
+
+    private void verifyApkSecurity(Context context, java.io.File apkFile) throws Exception {
+        PackageManager pm = context.getPackageManager();
+        PackageInfo archiveInfo = pm.getPackageArchiveInfo(
+            apkFile.getAbsolutePath(),
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES
+        );
+        if (archiveInfo == null) {
+            throw new Exception("corrupt APK: getPackageArchiveInfo returned null");
+        }
+
+        // 1. Package name must strictly match running application ID
+        String currentPackage = context.getPackageName();
+        if (!currentPackage.equals(archiveInfo.packageName)) {
+            throw new SecurityException("packageName mismatch: expected " + currentPackage + " but got " + archiveInfo.packageName);
+        }
+
+        // 2. Strict versionCode upgrade: archiveInfo.versionCode > currentVersionCode
+        long currentVersionCode;
+        PackageInfo currentInfo = pm.getPackageInfo(
+            currentPackage,
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES
+        );
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            currentVersionCode = currentInfo.getLongVersionCode();
+            long newVersionCode = archiveInfo.getLongVersionCode();
+            if (newVersionCode <= currentVersionCode) {
+                throw new IllegalStateException("versionCode must be greater: target=" + newVersionCode + ", current=" + currentVersionCode);
+            }
+        } else {
+            currentVersionCode = currentInfo.versionCode;
+            int newVersionCode = archiveInfo.versionCode;
+            if (newVersionCode <= currentVersionCode) {
+                throw new IllegalStateException("versionCode must be greater: target=" + newVersionCode + ", current=" + currentVersionCode);
+            }
+        }
+
+        // 3. Signature verification: verify certificate identity against current app
+        boolean certMatched = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            SigningInfo currentSigning = currentInfo.signingInfo;
+            SigningInfo newSigning = archiveInfo.signingInfo;
+            if (currentSigning != null && newSigning != null) {
+                Signature[] currentSigs = currentSigning.hasMultipleSigners()
+                    ? currentSigning.getApkContentsSigners()
+                    : currentSigning.getSigningCertificateHistory();
+                Signature[] newSigs = newSigning.hasMultipleSigners()
+                    ? newSigning.getApkContentsSigners()
+                    : newSigning.getSigningCertificateHistory();
+                if (currentSigs != null && newSigs != null && currentSigs.length > 0 && newSigs.length > 0) {
+                    for (Signature cur : currentSigs) {
+                        for (Signature nw : newSigs) {
+                            if (cur.equals(nw)) {
+                                certMatched = true;
+                                break;
+                            }
+                        }
+                        if (certMatched) break;
+                    }
+                }
+            }
+        } else {
+            Signature[] currentSigs = currentInfo.signatures;
+            Signature[] newSigs = archiveInfo.signatures;
+            if (currentSigs != null && newSigs != null && currentSigs.length > 0 && newSigs.length > 0) {
+                for (Signature cur : currentSigs) {
+                    for (Signature nw : newSigs) {
+                        if (cur.equals(nw)) {
+                            certMatched = true;
+                            break;
+                        }
+                    }
+                    if (certMatched) break;
+                }
+            }
+        }
+        if (!certMatched) {
+            throw new SecurityException("signature mismatch: APK signing certificate does not match installed app");
+        }
+    }
+
+    @PluginMethod
     public void downloadAndInstall(PluginCall call) {
         String urlString = call.getString("url", "");
         if (urlString == null || urlString.isEmpty()) {
             call.reject("no url");
             return;
         }
+
+        // Playback guard: refuse silent install interrupt if music is playing
+        if (PlaybackService.running) {
+            call.reject("PLAYBACK_ACTIVE");
+            return;
+        }
+
         Context context = getContext();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.getPackageManager().canRequestPackageInstalls()) {
@@ -408,6 +506,7 @@ public class MediaControlsPlugin extends Plugin {
             java.net.HttpURLConnection conn = null;
             java.io.InputStream in = null;
             java.io.FileOutputStream out = null;
+            java.io.File apkFile = null;
             try {
                 java.net.URL url = new java.net.URL(urlString);
                 conn = (java.net.HttpURLConnection) url.openConnection();
@@ -430,7 +529,7 @@ public class MediaControlsPlugin extends Plugin {
                 in = conn.getInputStream();
                 long totalLength = conn.getContentLength();
                 java.io.File cacheDir = context.getCacheDir();
-                java.io.File apkFile = new java.io.File(cacheDir, "update.apk");
+                apkFile = new java.io.File(cacheDir, "update.apk");
                 if (apkFile.exists()) apkFile.delete();
                 out = new java.io.FileOutputStream(apkFile);
                 byte[] buf = new byte[8192];
@@ -451,11 +550,18 @@ public class MediaControlsPlugin extends Plugin {
                     }
                 }
                 out.flush();
+                out.close();
+                out = null;
+
+                // Enterprise verification gate before launching installer
+                verifyApkSecurity(context, apkFile);
+
                 JSObject finish = new JSObject();
                 finish.put("downloaded", downloaded);
                 finish.put("total", totalLength);
                 finish.put("percent", 100);
                 notifyListeners("downloadProgress", finish);
+
                 Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", apkFile);
                 Intent intent = new Intent(Intent.ACTION_VIEW);
                 intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
@@ -464,6 +570,9 @@ public class MediaControlsPlugin extends Plugin {
                 context.startActivity(intent);
                 call.resolve();
             } catch (Exception e) {
+                if (apkFile != null && apkFile.exists()) {
+                    apkFile.delete();
+                }
                 call.reject("download failed: " + e.getMessage());
             } finally {
                 try { if (in != null) in.close(); } catch (Exception ignored) {}
@@ -472,6 +581,7 @@ public class MediaControlsPlugin extends Plugin {
             }
         }).start();
     }
+
     @PluginMethod
     public void installApk(PluginCall call) {
         String filePath = call.getString("filePath", "");
@@ -479,6 +589,13 @@ public class MediaControlsPlugin extends Plugin {
             call.reject("no filePath");
             return;
         }
+
+        // Playback guard: refuse silent install interrupt if music is playing
+        if (PlaybackService.running) {
+            call.reject("PLAYBACK_ACTIVE");
+            return;
+        }
+
         try {
             Context context = getContext();
             java.io.File file = new java.io.File(filePath);
@@ -494,6 +611,10 @@ public class MediaControlsPlugin extends Plugin {
                 call.reject("file not found: " + filePath);
                 return;
             }
+
+            // Enterprise verification gate before launching installer
+            verifyApkSecurity(context, file);
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.getPackageManager().canRequestPackageInstalls()) {
                     Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));

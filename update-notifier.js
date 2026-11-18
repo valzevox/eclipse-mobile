@@ -1,10 +1,10 @@
-// Eclipse Auto-Update Notifier & Markdown Changelog Viewer
-// Checks GitHub Releases (valzevox/eclipse-mobile) for newer semantic version vX.Y.Z
+// Eclipse Auto-Update Notifier & Markdown Changelog Viewer (Mobile)
+// Enterprise Auto-Update System conforming to Chrome/VS Code standard
 (() => {
   const build = window.ECLIPSE_BUILD || {};
   const REPO = build.repo || 'valzevox/eclipse-mobile';
   const CURRENT_VER = String(build.version || '1.0.8').replace(/^v/i, '');
-  const CHECK_EVERY = 30 * 60 * 1000;
+  const CHECK_MIN_INTERVAL = 3 * 3600 * 1000; // 3 hours minimum check on resume
   const SNOOZE = 24 * 3600 * 1000;
 
   const store = {
@@ -40,95 +40,62 @@
       if (t.startsWith('## ')) return '<h3 style="margin:12px 0 6px;color:#fff;font-size:15px;">' + inline(t.slice(3)) + '</h3>';
       if (t.startsWith('# ')) return '<h3 style="margin:12px 0 6px;color:#fff;font-size:16px;">' + inline(t.slice(2)) + '</h3>';
       if (t.startsWith('- ') || t.startsWith('* ')) {
-        return '<div style="display:flex;gap:8px;margin:4px 0;line-height:1.45;"><span style="color:var(--md-sys-color-primary,#B69DF8);">•</span><span>' + inline(t.slice(2)) + '</span></div>';
+        return '<div style="display:flex;gap:8px;margin:4px 0;line-height:1.45;"><span style="color:var(--md-sys-color-primary,#B69DF8);">&bull;</span><span>' + inline(t.slice(2)) + '</span></div>';
       }
       return '<p style="margin:4px 0;line-height:1.45;">' + inline(t) + '</p>';
     }).join('');
   }
 
-  async function fetchLatestRelease() {
+  // 1. Static CDN manifest (Bypasses GitHub 60 req/h rate limit) with API fallback
+  async function fetchManifest() {
+    const staticUrl = 'https://github.com/' + REPO + '/releases/latest/download/latest.json';
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(staticUrl, {
+        headers: { Accept: 'application/json' },
+        signal: ctrl.signal
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.version) return data;
+      }
+    } catch (_) {}
+    finally {
+      clearTimeout(timer);
+    }
+
+    // Fallback: GitHub Releases API
+    const apiCtrl = new AbortController();
+    const apiTimer = setTimeout(() => apiCtrl.abort(), 10000);
     try {
       const res = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
         headers: { Accept: 'application/vnd.github+json' },
-        signal: ctrl.signal
+        signal: apiCtrl.signal
       });
-      if (res.ok) return await res.json();
-      const listRes = await fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=5', {
-        headers: { Accept: 'application/vnd.github+json' },
-        signal: ctrl.signal
-      });
-      if (!listRes.ok) return null;
-      const list = await listRes.json();
-      return Array.isArray(list) && list.length ? list[0] : null;
-    } catch (e) {
+      if (res.ok) {
+        const rel = await res.json();
+        const tag = String(rel.tag_name || '').trim();
+        const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/);
+        const remoteVer = verMatch ? verMatch[1] : tag.replace(/^v/i, '');
+        const assets = Array.isArray(rel.assets) ? rel.assets : [];
+        const apkAsset = assets.find((a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'));
+        return {
+          version: remoteVer,
+          tag: tag,
+          notes: rel.body || '',
+          url: apkAsset ? apkAsset.browser_download_url : ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '.apk'),
+          page: rel.html_url || ('https://github.com/' + REPO + '/releases/tag/' + tag),
+          blocked: [],
+          minSupported: '0.0.0'
+        };
+      }
+      return null;
+    } catch (_) {
       return null;
     } finally {
-      clearTimeout(timer);
+      clearTimeout(apiTimer);
     }
-  }
-
-  async function fetchReleaseChangelog(tag, prevTag) {
-    try {
-      // 1. Check if release notes exist on the specific tag
-      const relRes = await fetch('https://api.github.com/repos/' + REPO + '/releases/tags/' + tag, {
-        headers: { Accept: 'application/vnd.github+json' }
-      });
-      if (relRes.ok) {
-        const relData = await relRes.json();
-        if (relData.body && relData.body.trim().length > 0) {
-          return relData.body.trim();
-        }
-      }
-    } catch (e) {}
-
-    // 2. If release notes are empty, fetch commit compare diff from GitHub API
-    try {
-      const compareUrl = prevTag
-        ? 'https://api.github.com/repos/' + REPO + '/compare/' + prevTag + '...' + tag
-        : 'https://api.github.com/repos/' + REPO + '/commits?sha=' + tag + '&per_page=10';
-      const compRes = await fetch(compareUrl, { headers: { Accept: 'application/vnd.github+json' } });
-      if (compRes.ok) {
-        const compData = await compRes.json();
-        const commits = Array.isArray(compData.commits) ? compData.commits : (Array.isArray(compData) ? compData : []);
-        if (commits.length > 0) {
-          const lines = commits.map(c => {
-            const msg = (c.commit && c.commit.message ? c.commit.message : '').split('\n')[0].trim();
-            return msg ? '- ' + msg : '';
-          }).filter(Boolean);
-          if (lines.length > 0) {
-            return '### Changes in ' + tag + '\n' + lines.join('\n');
-          }
-        }
-      }
-    } catch (e) {}
-    return '';
-  }
-
-  function describe(rel) {
-    if (!rel) return null;
-    const tag = String(rel.tag_name || '').trim();
-    const body = String(rel.body || '');
-    const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/) || body.match(/eclipse-version:\s*([0-9][\w.-]*)/i);
-    const remoteVer = verMatch ? verMatch[1] : tag.replace(/^v/i, '');
-    const newerVer = remoteVer && /^\d+\.\d+/.test(remoteVer) && isNewerVer(remoteVer, CURRENT_VER);
-    if (!newerVer) return null;
-
-    const assets = Array.isArray(rel.assets) ? rel.assets : [];
-    const apkAsset = assets.find((a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'));
-    const exeAsset = assets.find((a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.exe'));
-    const isWin = navigator.userAgent.includes('Windows') && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    const chosen = isWin ? (exeAsset || apkAsset) : (apkAsset || exeAsset);
-    const downloadUrl = (chosen && chosen.browser_download_url) || ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '.apk');
-
-    return {
-      tag,
-      version: remoteVer,
-      notes: body,
-      url: downloadUrl,
-      page: rel.html_url || ('https://github.com/' + REPO + '/releases/tag/' + tag)
-    };
   }
 
   function openExternal(url) {
@@ -140,17 +107,56 @@
     location.href = url;
   }
 
+  function persistPlaybackState() {
+    try {
+      const audio = document.querySelector('audio');
+      const nowPlayingTitle = document.querySelector('.now-playing-title, #track-title');
+      const nowPlayingArtist = document.querySelector('.now-playing-artist, #track-artist');
+      const state = {
+        savedAt: Date.now(),
+        currentTime: audio ? audio.currentTime : 0,
+        paused: audio ? audio.paused : true,
+        volume: audio ? audio.volume : 1,
+        title: nowPlayingTitle ? nowPlayingTitle.textContent : '',
+        artist: nowPlayingArtist ? nowPlayingArtist.textContent : '',
+        trackId: window.currentTrackId || null,
+        queue: window.currentQueue || []
+      };
+      localStorage.setItem('eclipse_playback_resume', JSON.stringify(state));
+    } catch (_) {}
+  }
+
   let modalEl = null;
-  function showUpdateModal(update, isChangelogOnly = false) {
+  function showUpdateModal(update, options = {}) {
     if (modalEl) modalEl.remove();
     modalEl = document.createElement('div');
     modalEl.style.cssText = 'position:fixed;inset:0;z-index:999998;background:rgba(0,0,0,0.72);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;';
-    const title = isChangelogOnly ? "What\'s New in Eclipse" : "Update Available";
-    const subtitle = isChangelogOnly ? ("Eclipse v" + update.version + " • Just Updated") : ("Eclipse v" + update.version + " • Latest Build");
-    const actionBtnText = isChangelogOnly ? 'Got it' : 'Download & Install';
-    let html = '<div style="width:100%;max-width:440px;max-height:85vh;background:var(--md-sys-color-surface-container-high,#1A1922);border:1px solid rgba(255,255,255,0.14);border-radius:28px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 60px rgba(0,0,0,0.7);color:var(--md-sys-color-on-surface,#fff);animation:popupFadeIn 0.25s cubic-bezier(0.2, 0, 0, 1);">';
+    
+    const isChangelogOnly = !!options.isChangelogOnly;
+    const isBlocked = !!options.isBlocked;
+    const isMandatory = !!options.isMandatory;
+
+    let title = "Update Available";
+    let subtitle = "Eclipse v" + update.version + " &bull; Latest Build";
+    let actionBtnText = 'Download & Install';
+
+    if (isChangelogOnly) {
+      title = "What's New in Eclipse";
+      subtitle = "Eclipse v" + update.version + " &bull; Just Updated";
+      actionBtnText = 'Got it';
+    } else if (isBlocked) {
+      title = "Cảnh Báo Phiên Bản Lỗi";
+      subtitle = "Bản hiện tại (v" + CURRENT_VER + ") đã bị thu hồi do lỗi nghiêm trọng.";
+      actionBtnText = 'Cập Nhật Bản Vá Ngay';
+    } else if (isMandatory) {
+      title = "Bắt Buộc Cập Nhật";
+      subtitle = "Phiên bản hiện tại không còn được hỗ trợ.";
+      actionBtnText = 'Cập Nhật Ngay';
+    }
+
+    let html = '<div style="width:100%;max-width:440px;max-height:85vh;background:var(--md-sys-color-surface-container-high,#1A1922);border:1px solid ' + (isBlocked ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.14)') + ';border-radius:28px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 60px rgba(0,0,0,0.7);color:var(--md-sys-color-on-surface,#fff);animation:popupFadeIn 0.25s cubic-bezier(0.2, 0, 0, 1);">';
     html += '<div style="display:flex;align-items:center;gap:14px;">';
-    html += '<div style="width:48px;height:48px;border-radius:24px;background:rgba(182,157,248,0.2);display:flex;align-items:center;justify-content:center;color:var(--md-sys-color-primary,#B69DF8);flex-shrink:0;">';
+    html += '<div style="width:48px;height:48px;border-radius:24px;background:' + (isBlocked ? 'rgba(239,68,68,0.2)' : 'rgba(182,157,248,0.2)') + ';display:flex;align-items:center;justify-content:center;color:' + (isBlocked ? '#EF4444' : 'var(--md-sys-color-primary,#B69DF8)') + ';flex-shrink:0;">';
     html += '<svg viewBox="0 0 512 512" width="28" height="28" fill="currentColor"><path d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>';
     html += '</div>';
     html += '<div style="flex:1;min-width:0;">';
@@ -159,15 +165,18 @@
     html += '</div></div>';
     html += '<div style="overflow-y:auto;max-height:48vh;padding:16px;background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.06);border-radius:20px;font-size:13px;color:#D4D4D8;line-height:1.5;">' + renderMarkdown(update.notes) + '</div>';
     html += '<div id="eclipse-upd-progress-wrap" style="display:none;flex-direction:column;gap:6px;">';
-    html += '<div style="display:flex;justify-content:space-between;font-size:12px;opacity:0.8;"><span id="eclipse-upd-status-text">Downloading update…</span><span id="eclipse-upd-pct-text">0%</span></div>';
-    html += '<div style="height:6px;width:100%;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;"><div id="eclipse-upd-bar" style="height:100%;width:0%;background:var(--md-sys-color-primary,#B69DF8);transition:width 0.2s ease;"></div></div>';
+    html += '<div style="display:flex;justify-content:space-between;font-size:12px;opacity:0.8;"><span id="eclipse-upd-status-text">Downloading update&hellip;</span><span id="eclipse-upd-pct-text">0%</span></div>';
+    html += '<div style="height:6px;width:100%;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;"><div id="eclipse-upd-bar" style="height:100%;width:0%;background:' + (isBlocked ? '#EF4444' : 'var(--md-sys-color-primary,#B69DF8)') + ';transition:width 0.2s ease;"></div></div>';
     html += '</div>';
     html += '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px;">';
-    if (!isChangelogOnly) html += '<button type="button" id="eclipse-upd-later" style="padding:11px 20px;border-radius:999px;background:rgba(255,255,255,0.08);color:#D4D4D8;font-weight:600;font-size:13px;cursor:pointer;border:none;">Later</button>';
-    html += '<button type="button" id="eclipse-upd-go" style="padding:11px 22px;border-radius:999px;background:var(--md-sys-color-primary,#B69DF8);color:#121214;font-weight:700;font-size:13px;cursor:pointer;border:none;">' + actionBtnText + '</button>';
+    if (!isChangelogOnly && !isBlocked && !isMandatory) {
+      html += '<button type="button" id="eclipse-upd-later" style="padding:11px 20px;border-radius:999px;background:rgba(255,255,255,0.08);color:#D4D4D8;font-weight:600;font-size:13px;cursor:pointer;border:none;">Later</button>';
+    }
+    html += '<button type="button" id="eclipse-upd-go" style="padding:11px 22px;border-radius:999px;background:' + (isBlocked ? '#EF4444' : 'var(--md-sys-color-primary,#B69DF8)') + ';color:' + (isBlocked ? '#fff' : '#121214') + ';font-weight:700;font-size:13px;cursor:pointer;border:none;">' + actionBtnText + '</button>';
     html += '</div></div>';
     modalEl.innerHTML = html;
     document.body.appendChild(modalEl);
+
     const laterBtn = modalEl.querySelector('#eclipse-upd-later');
     if (laterBtn) {
       laterBtn.addEventListener('click', () => {
@@ -176,31 +185,51 @@
         modalEl = null;
       });
     }
+
     const goBtn = modalEl.querySelector('#eclipse-upd-go');
-    goBtn.addEventListener('click', () => {
+    goBtn.addEventListener('click', async () => {
       if (isChangelogOnly) {
         modalEl.remove();
         modalEl = null;
         return;
       }
+
+      // Check if playback is active
+      if (window.EclipseNative && typeof window.EclipseNative.isPlaybackRunning === 'function') {
+        const pb = await window.EclipseNative.isPlaybackRunning();
+        if (pb && pb.running) {
+          const proceed = confirm('Nhạc đang phát. Bạn có muốn tạm dừng nhạc để tiếp tục cài đặt bản cập nhật không?');
+          if (!proceed) return;
+          const audio = document.querySelector('audio');
+          if (audio) audio.pause();
+        }
+      }
+
+      // Persist state before update
+      persistPlaybackState();
+
       const progWrap = modalEl.querySelector('#eclipse-upd-progress-wrap');
       const bar = modalEl.querySelector('#eclipse-upd-bar');
       const statusTxt = modalEl.querySelector('#eclipse-upd-status-text');
       const pctTxt = modalEl.querySelector('#eclipse-upd-pct-text');
+
       if (window.EclipseNative && typeof window.EclipseNative.downloadAndInstall === 'function' && String(update.url || '').endsWith('.apk')) {
         goBtn.disabled = true;
         goBtn.style.opacity = '0.5';
         if (laterBtn) laterBtn.style.display = 'none';
         progWrap.style.display = 'flex';
+
         window.EclipseNative.downloadAndInstall(update.url, (p) => {
           const pct = Math.max(0, Math.min(100, (p && p.percent) || 0));
           if (bar) bar.style.width = pct + '%';
           if (pctTxt) pctTxt.textContent = pct + '%';
-          if (pct >= 100 && statusTxt) statusTxt.textContent = 'Launching installer…';
+          if (pct >= 100 && statusTxt) statusTxt.textContent = 'Verifying APK security & launching...';
         }).catch((err) => {
           const errMsg = String((err && err.message) || err || '');
           if (errMsg.includes('PERMISSION_NEEDED')) {
-            if (statusTxt) statusTxt.textContent = 'Please allow Install unknown apps, then click Download again';
+            if (statusTxt) statusTxt.textContent = 'Cần cấp quyền Cài đặt ứng dụng không rõ nguồn, sau đó bấm Tải lại';
+          } else if (errMsg.includes('PLAYBACK_ACTIVE')) {
+            if (statusTxt) statusTxt.textContent = 'Vui lòng dừng phát nhạc trước khi cài đặt.';
           } else {
             openExternal(update.url);
           }
@@ -214,31 +243,6 @@
         modalEl = null;
       }
     });
-  }
-
-  let banner = null;
-  function hideBanner() {
-    if (!banner) return;
-    const b = banner; banner = null;
-    b.classList.remove('show');
-    setTimeout(() => b.remove(), 400);
-  }
-  function showBanner(update) {
-    if (banner) return;
-    const snooze = store.get('eclipse_update_snooze');
-    if (snooze && snooze.ver === update.version && snooze.until > Date.now()) return;
-    banner = document.createElement('div');
-    banner.className = 'update-banner';
-    banner.setAttribute('role', 'status');
-    banner.innerHTML = `
-      <svg class="update-banner-star" viewBox="0 0 512 512" aria-hidden="true"><path d="M256 36C134.497 36 36 134.497 36 256C36 377.503 134.497 476 256 476C330.185 476 395.816 439.298 435.691 383.105C411.519 401.181 381.471 411.9 348.9 411.9C268.819 411.9 203.9 346.981 203.9 266.9C203.9 186.819 268.819 121.9 348.9 121.9C381.471 121.9 411.519 132.619 435.691 150.695C395.816 94.502 330.185 36 256 36ZM372 204C364.268 204 358 210.268 358 218V316C358 323.732 364.268 330 372 330C379.732 330 386 323.732 386 316V218C386 210.268 379.732 204 372 204ZM424 176C416.268 176 410 182.268 410 190V344C410 351.732 416.268 358 424 358C431.732 358 438 351.732 438 344V190C438 182.268 431.732 176 424 176ZM320 236C312.268 236 306 242.268 306 250V284C306 291.732 312.268 298 320 298C327.732 298 334 291.732 334 284V250C334 242.268 327.732 236 320 236Z"/></svg>
-      <div class="update-banner-text"><b data-i18n>Update available</b><span>Eclipse v${update.version} is ready</span></div>
-      <button type="button" class="update-banner-later" data-i18n>Details</button>
-      <button type="button" class="update-banner-go" data-i18n>Download</button>`;
-    banner.querySelector('.update-banner-go').addEventListener('click', () => { openExternal(update.url); hideBanner(); });
-    banner.querySelector('.update-banner-later').addEventListener('click', () => { hideBanner(); showUpdateModal(update); });
-    document.body.appendChild(banner);
-    requestAnimationFrame(() => requestAnimationFrame(() => banner && banner.classList.add('show')));
   }
 
   const statusEl = document.getElementById('update-status');
@@ -257,15 +261,53 @@
   let current = null;
 
   async function check(manual) {
-    if (manual) setStatus('Checking GitHub releases…');
-    const rel = await fetchLatestRelease();
-    if (!rel) {
-      if (manual) setStatus("Couldn't reach GitHub, try again later");
+    if (manual) setStatus('Checking updates...');
+    const manifest = await fetchManifest();
+    if (!manifest) {
+      if (manual) setStatus("Couldn't reach update server, try again later");
       return;
     }
     store.set('eclipse_update_last', Date.now());
-    current = describe(rel);
-    if (current) {
+
+    // 1. Check if current version is in blocked list
+    const blockedList = Array.isArray(manifest.blocked) ? manifest.blocked : [];
+    if (blockedList.includes(CURRENT_VER)) {
+      setStatus('Phiên bản v' + CURRENT_VER + ' bị thu hồi');
+      showUpdateModal({
+        version: manifest.version,
+        notes: '### Cảnh Báo Bản Thu Hồi\nPhiên bản hiện tại gặp lỗi nghiêm trọng đã bị thu hồi. Vui lòng cập nhật bản vá ngay.',
+        url: manifest.url,
+        page: manifest.page
+      }, { isBlocked: true });
+      return;
+    }
+
+    // 2. Check if current version is below minSupported
+    if (manifest.minSupported && isNewerVer(manifest.minSupported, CURRENT_VER)) {
+      setStatus('Bản v' + CURRENT_VER + ' hết hạn hỗ trợ');
+      showUpdateModal({
+        version: manifest.version,
+        notes: '### Yêu Cầu Cập Nhật\nPhiên bản hiện tại đã ngừng hỗ trợ. Vui lòng nâng cấp lên phiên bản mới nhất.',
+        url: manifest.url,
+        page: manifest.page
+      }, { isMandatory: true });
+      return;
+    }
+
+    // 3. Target version in blocked list guard
+    if (blockedList.includes(manifest.version)) {
+      setStatus("You're up to date (v" + CURRENT_VER + ')');
+      return;
+    }
+
+    // 4. Normal update check
+    if (manifest.version && isNewerVer(manifest.version, CURRENT_VER)) {
+      current = {
+        version: manifest.version,
+        notes: manifest.notes || '',
+        url: manifest.url,
+        page: manifest.page || ('https://github.com/' + REPO + '/releases/latest')
+      };
       setStatus('Eclipse v' + current.version + ' is available', current);
       showUpdateModal(current);
     } else {
@@ -274,38 +316,30 @@
   }
 
   if (checkBtn) checkBtn.addEventListener('click', () => (current ? showUpdateModal(current) : check(true)));
-  if (statusEl) setStatus('Eclipse v' + CURRENT_VER + ' • Checks for updates automatically');
+  if (statusEl) setStatus('Eclipse v' + CURRENT_VER + ' &bull; Checks for updates automatically');
 
+  // "Just Updated" modal on fresh launch
   const lastSeenVer = store.get('eclipse_last_seen_version');
   if (lastSeenVer && isNewerVer(CURRENT_VER, lastSeenVer)) {
     store.set('eclipse_last_seen_version', CURRENT_VER);
-    const prevTag = 'v' + lastSeenVer;
-    const currentTag = 'v' + CURRENT_VER;
-    fetchReleaseChangelog(currentTag, prevTag).then((changelog) => {
-      showUpdateModal({
-        tag: currentTag,
-        version: CURRENT_VER,
-        notes: changelog || '',
-        page: 'https://github.com/' + REPO + '/releases/tag/' + currentTag
-      }, true);
-    }).catch(() => {
-      showUpdateModal({
-        tag: currentTag,
-        version: CURRENT_VER,
-        notes: '',
-        page: 'https://github.com/' + REPO + '/releases/tag/' + currentTag
-      }, true);
-    });
+    showUpdateModal({
+      version: CURRENT_VER,
+      notes: '### Cập nhật thành công v' + CURRENT_VER + '\nChào mừng bạn đến với phiên bản mới nhất của Eclipse!',
+      page: 'https://github.com/' + REPO + '/releases/latest'
+    }, { isChangelogOnly: true });
   } else if (!lastSeenVer) {
     store.set('eclipse_last_seen_version', CURRENT_VER);
   }
 
   setTimeout(() => check(false), 2000);
+
+  // Resume check with 3h throttle to save battery and rate limits
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       const last = store.get('eclipse_update_last') || 0;
-      if (Date.now() - last > CHECK_EVERY) check(false);
+      if (Date.now() - last > CHECK_MIN_INTERVAL) check(false);
     }
   });
+
   window.EclipseUpdates = { check: () => check(true) };
 })();
