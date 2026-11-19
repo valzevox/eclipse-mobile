@@ -39,3 +39,16 @@ opencode.json
 .grok/
 .kiro/
 .ignore
+
+# Release binaries, keystores & local build artifacts (NEVER commit to source tree)
+release-*/
+release-notes-*.md
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*.pem

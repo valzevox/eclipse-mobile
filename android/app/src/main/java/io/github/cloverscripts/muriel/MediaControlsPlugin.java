@@ -310,10 +310,31 @@ public class MediaControlsPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("supported", supported);
         r.put("vendor", VENDOR);
+        r.put("manufacturer", Build.MANUFACTURER != null ? Build.MANUFACTURER : "");
+        r.put("brand", Build.BRAND != null ? Build.BRAND : "");
+        r.put("model", Build.MODEL != null ? Build.MODEL : "");
+        Context ctx = getContext();
+        String pkgName = ctx != null ? ctx.getPackageName() : "";
+        r.put("packageName", pkgName);
+        String flavor = (pkgName.contains("spotify") || pkgName.contains("vivo")) ? "vivo" : "standard";
+        r.put("flavor", flavor);
+        try {
+            if (ctx != null) {
+                PackageInfo pInfo = ctx.getPackageManager().getPackageInfo(pkgName, 0);
+                r.put("versionName", pInfo.versionName != null ? pInfo.versionName : "");
+                long vCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? pInfo.getLongVersionCode() : pInfo.versionCode;
+                r.put("versionCode", vCode);
+            }
+        } catch (Exception ignored) {}
         r.put("defaultOn", supported && "vivo".equals(VENDOR));
         r.put("notifications", notificationsOn());
         r.put("promoted", supported && promotedOn());
         return r;
+    }
+
+    @PluginMethod
+    public void getAppEnvironment(PluginCall call) {
+        call.resolve(islandState());
     }
 
     private boolean notificationsOn() {

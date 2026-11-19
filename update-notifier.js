@@ -3,9 +3,164 @@
 (() => {
   const build = window.ECLIPSE_BUILD || {};
   const REPO = build.repo || 'valzevox/eclipse-mobile';
-  const CURRENT_VER = String(build.version || '1.0.8').replace(/^v/i, '');
+  let CURRENT_VER = String(build.version || '1.0.50').replace(/^v/i, '');
   const CHECK_MIN_INTERVAL = 3 * 3600 * 1000; // 3 hours minimum check on resume
   const SNOOZE = 24 * 3600 * 1000;
+
+  let cachedEnv = null;
+  async function resolveAppEnvironment() {
+    if (cachedEnv) return cachedEnv;
+    const isIOS = (window.Capacitor && typeof window.Capacitor.getPlatform === 'function')
+      ? window.Capacitor.getPlatform() === 'ios'
+      : /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    let packageName = '';
+    let flavor = localStorage.getItem('eclipse_installed_flavor') || '';
+    let vendor = 'generic';
+    let manufacturer = '';
+    let brand = '';
+    let model = '';
+    let nativeVer = '';
+
+    // 1. Primary: Native MediaControlsPlugin.getAppEnvironment()
+    try {
+      if (window.EclipseNative && typeof window.EclipseNative.getAppEnvironment === 'function') {
+        const env = await window.EclipseNative.getAppEnvironment();
+        if (env && typeof env === 'object') {
+          if (env.packageName) packageName = String(env.packageName);
+          if (env.flavor) flavor = String(env.flavor);
+          if (env.vendor) vendor = String(env.vendor);
+          if (env.manufacturer) manufacturer = String(env.manufacturer);
+          if (env.brand) brand = String(env.brand);
+          if (env.model) model = String(env.model);
+          if (env.versionName) nativeVer = String(env.versionName).replace(/^v/i, '');
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback: Capacitor App.getInfo()
+    if (!packageName) {
+      try {
+        const capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (capApp && typeof capApp.getInfo === 'function') {
+          const info = await capApp.getInfo();
+          if (info && info.id) packageName = String(info.id);
+          if (info && info.version && !nativeVer) nativeVer = String(info.version).replace(/^v/i, '');
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback: islandState()
+    if (!packageName && window.EclipseNative && typeof window.EclipseNative.islandState === 'function') {
+      try {
+        const st = await window.EclipseNative.islandState();
+        if (st && st.packageName) packageName = String(st.packageName);
+        if (st && st.flavor && !flavor) flavor = String(st.flavor);
+        if (st && st.vendor && vendor === 'generic') vendor = String(st.vendor);
+      } catch (_) {}
+    }
+
+    // 4. Derive flavor deterministically from installed packageName first (prevents signature/applicationId mismatch)
+    if (isIOS) {
+      flavor = 'ios';
+    } else if (packageName === 'com.spotify.music' || packageName.toLowerCase().includes('vivo')) {
+      flavor = 'vivo';
+    } else if (packageName.includes('eclipsemobile') || packageName.includes('muriel')) {
+      flavor = 'standard';
+    } else if (!flavor) {
+      const prevPattern = localStorage.getItem('eclipse_installed_asset_pattern');
+      flavor = prevPattern === 'vivo' ? 'vivo' : 'standard';
+    }
+
+    if (nativeVer && /^\d+\.\d+\.\d+/.test(nativeVer) && isNewerVer(nativeVer, CURRENT_VER)) {
+      CURRENT_VER = nativeVer;
+    }
+
+    try {
+      localStorage.setItem('eclipse_installed_flavor', flavor);
+      localStorage.setItem('eclipse_installed_asset_pattern', flavor);
+    } catch (_) {}
+
+    cachedEnv = {
+      isIOS,
+      packageName: packageName || (flavor === 'vivo' ? 'com.spotify.music' : 'com.valzevox.eclipsemobile'),
+      flavor,
+      vendor,
+      manufacturer,
+      brand,
+      model
+    };
+    return cachedEnv;
+  }
+
+  function selectPackageForEnvironment(manifest, env) {
+    if (!manifest) return { url: '', assetName: '', sha512: '' };
+    const flavor = (env && env.flavor) || 'standard';
+    const pkgName = (env && env.packageName) || '';
+    const pkgs = manifest.packages && typeof manifest.packages === 'object' ? manifest.packages : null;
+
+    if (pkgs) {
+      // 1. Exact packageName match across manifest.packages
+      if (pkgName) {
+        for (const key of Object.keys(pkgs)) {
+          const entry = pkgs[key];
+          if (entry && entry.packageName && entry.packageName === pkgName && entry.url) {
+            return {
+              url: entry.url,
+              fallbackUrl: entry.fallbackUrl || entry.url,
+              assetName: entry.assetName || '',
+              sha512: entry.sha512 || '',
+              flavorKey: key
+            };
+          }
+        }
+      }
+      // 2. Exact flavor key match (e.g. 'vivo', 'standard', 'ios')
+      if (pkgs[flavor] && pkgs[flavor].url) {
+        const entry = pkgs[flavor];
+        return {
+          url: entry.url,
+          fallbackUrl: entry.fallbackUrl || entry.url,
+          assetName: entry.assetName || '',
+          sha512: entry.sha512 || '',
+          flavorKey: flavor
+        };
+      }
+      // 3. Default to standard package in map
+      if (pkgs.standard && pkgs.standard.url) {
+        return {
+          url: pkgs.standard.url,
+          fallbackUrl: pkgs.standard.fallbackUrl || pkgs.standard.url,
+          assetName: pkgs.standard.assetName || '',
+          sha512: pkgs.standard.sha512 || '',
+          flavorKey: 'standard'
+        };
+      }
+    }
+
+    // Legacy single-url manifest fallback: ensure we never feed a vivo APK to standard or vice-versa
+    const tag = manifest.tag || ('v' + manifest.version);
+    if (flavor === 'vivo') {
+      return {
+        url: 'https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '-vivo.apk',
+        fallbackUrl: 'https://github.com/' + REPO + '/releases/latest/download/Eclipse-vivo.apk',
+        assetName: 'Eclipse-' + tag + '-vivo.apk',
+        sha512: '',
+        flavorKey: 'vivo'
+      };
+    }
+    const rawUrl = String(manifest.url || '');
+    const safeStandardUrl = (rawUrl && !rawUrl.toLowerCase().includes('vivo'))
+      ? rawUrl
+      : ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '.apk');
+    return {
+      url: safeStandardUrl,
+      fallbackUrl: 'https://github.com/' + REPO + '/releases/latest/download/Eclipse.apk',
+      assetName: 'Eclipse-' + tag + '.apk',
+      sha512: manifest.sha512 || '',
+      flavorKey: 'standard'
+    };
+  }
 
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -79,12 +234,34 @@
         const verMatch = tag.match(/^v?(\d+\.\d+\.\d+)/);
         const remoteVer = verMatch ? verMatch[1] : tag.replace(/^v/i, '');
         const assets = Array.isArray(rel.assets) ? rel.assets : [];
-        const apkAsset = assets.find((a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk'));
+        const isApk = (a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk');
+        const isVivo = (a) => isApk(a) && a.name.toLowerCase().includes('vivo');
+        const isStandard = (a) => isApk(a) && !a.name.toLowerCase().includes('vivo');
+
+        const stdAsset = assets.find((a) => isStandard(a) && a.name.includes(remoteVer)) || assets.find(isStandard);
+        const vivoAsset = assets.find((a) => isVivo(a) && a.name.includes(remoteVer)) || assets.find(isVivo);
+        const stdUrl = stdAsset ? stdAsset.browser_download_url : ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '.apk');
+        const vivoUrl = vivoAsset ? vivoAsset.browser_download_url : ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '-vivo.apk');
+
         return {
           version: remoteVer,
           tag: tag,
           notes: rel.body || '',
-          url: apkAsset ? apkAsset.browser_download_url : ('https://github.com/' + REPO + '/releases/download/' + tag + '/Eclipse-' + tag + '.apk'),
+          url: stdUrl,
+          packages: {
+            standard: {
+              packageName: 'com.valzevox.eclipsemobile',
+              assetName: stdAsset ? stdAsset.name : ('Eclipse-' + tag + '.apk'),
+              url: stdUrl,
+              fallbackUrl: 'https://github.com/' + REPO + '/releases/latest/download/Eclipse.apk'
+            },
+            vivo: {
+              packageName: 'com.spotify.music',
+              assetName: vivoAsset ? vivoAsset.name : ('Eclipse-' + tag + '-vivo.apk'),
+              url: vivoUrl,
+              fallbackUrl: 'https://github.com/' + REPO + '/releases/latest/download/Eclipse-vivo.apk'
+            }
+          },
           page: rel.html_url || ('https://github.com/' + REPO + '/releases/tag/' + tag),
           blocked: [],
           minSupported: '0.0.0'
@@ -143,7 +320,10 @@
     const isNoSafeTarget = !!options.isNoSafeTarget;
 
     let title = "Update Available";
-    let subtitle = "Eclipse v" + update.version + " &bull; Latest Build";
+    const flavorLabel = update.flavor === 'vivo'
+      ? 'vivo / iQOO OriginOS Edition'
+      : (update.flavor === 'ios' ? 'iOS Edition' : 'Standard Android Edition');
+    let subtitle = "Eclipse v" + update.version + " &bull; " + flavorLabel;
     let actionBtnText = 'Download & Install';
 
     if (isChangelogOnly) {
@@ -272,12 +452,18 @@
 
   async function check(manual) {
     if (manual) setStatus('Checking updates...');
+    const env = await resolveAppEnvironment();
+    if (aboutVerEl) aboutVerEl.textContent = 'Version ' + CURRENT_VER;
+    if (creditsVerEl) creditsVerEl.textContent = 'v' + CURRENT_VER;
+
     const manifest = await fetchManifest();
     if (!manifest) {
       if (manual) setStatus("Couldn't reach update server, try again later");
       return;
     }
     store.set('eclipse_update_last', Date.now());
+    const pkg = selectPackageForEnvironment(manifest, env);
+    const targetUrl = pkg.url || manifest.url;
 
     // 1. Check if current version is in blocked list
     const blockedList = Array.isArray(manifest.blocked) ? manifest.blocked : [];
@@ -289,6 +475,7 @@
       setStatus('Bản vá đang được chuẩn bị');
       showUpdateModal({
         version: CURRENT_VER,
+        flavor: env.flavor,
         notes: '### Cảnh Báo Bản Thu Hồi\n\nPhiên bản hiện tại gặp lỗi nghiêm trọng đã bị thu hồi. Bản vá đang được chuẩn bị, vui lòng quay lại sau.',
         page: manifest.page || ('https://github.com/' + REPO + '/releases')
       }, { isNoSafeTarget: true });
@@ -300,8 +487,10 @@
       setStatus('Phiên bản v' + CURRENT_VER + ' bị thu hồi');
       showUpdateModal({
         version: manifest.version,
+        flavor: env.flavor,
+        assetName: pkg.assetName,
         notes: '### Cảnh Báo Bản Thu Hồi\nPhiên bản hiện tại gặp lỗi nghiêm trọng đã bị thu hồi. Vui lòng cập nhật bản vá ngay.',
-        url: manifest.url,
+        url: targetUrl,
         page: manifest.page
       }, { isBlocked: true });
       return;
@@ -312,8 +501,10 @@
       setStatus('Bản v' + CURRENT_VER + ' hết hạn hỗ trợ');
       showUpdateModal({
         version: manifest.version,
+        flavor: env.flavor,
+        assetName: pkg.assetName,
         notes: '### Yêu Cầu Cập Nhật\nPhiên bản hiện tại đã ngừng hỗ trợ. Vui lòng nâng cấp lên phiên bản mới nhất.',
-        url: manifest.url,
+        url: targetUrl,
         page: manifest.page
       }, { isMandatory: true });
       return;
@@ -329,11 +520,25 @@
     if (manifest.version && isNewerVer(manifest.version, CURRENT_VER)) {
       current = {
         version: manifest.version,
+        flavor: env.flavor,
+        vendor: env.vendor,
+        packageName: env.packageName,
+        assetName: pkg.assetName,
+        sha512: pkg.sha512,
         notes: manifest.notes || '',
-        url: manifest.url,
+        url: targetUrl,
+        fallbackUrl: pkg.fallbackUrl || targetUrl,
         page: manifest.page || ('https://github.com/' + REPO + '/releases/latest')
       };
       setStatus('Eclipse v' + current.version + ' is available', current);
+
+      // Respect 24h snooze for automatic checks
+      if (!manual) {
+        const snooze = store.get('eclipse_update_snooze');
+        if (snooze && snooze.ver === current.version && Date.now() < (snooze.until || 0)) {
+          return;
+        }
+      }
       showUpdateModal(current);
     } else {
       setStatus("You're up to date (v" + CURRENT_VER + ')');
