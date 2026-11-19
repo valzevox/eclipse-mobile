@@ -1617,6 +1617,16 @@ function runYtDlpNow(args, timeoutMs, opts, priority) {
   });
 }
 
+function getCascadingThumbnails(videoId) {
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) return [];
+  return [
+    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/hq720.jpg`,
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  ];
+}
+
 async function cacheThumbnailToDisk(cleanId, thumbnailUrl) {
   if (!cleanId || !thumbnailUrl || !thumbnailUrl.startsWith('http')) return null;
   const destPath = path.join(THUMBNAILS_DIR, `${cleanId}.jpg`);
