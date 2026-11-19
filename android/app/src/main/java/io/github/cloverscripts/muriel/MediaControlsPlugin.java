@@ -32,6 +32,14 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import android.app.Dialog;
+import android.view.ViewGroup;
+import android.webkit.CookieManager;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -641,6 +649,116 @@ public class MediaControlsPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("failed to launch installer: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void openGoogleLogin(PluginCall call) {
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing()) {
+            call.reject("Activity is not available");
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            try {
+                Dialog loginDialog = new Dialog(activity, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+                FrameLayout layout = new FrameLayout(activity);
+                layout.setLayoutParams(new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                ));
+
+                WebView webView = new WebView(activity);
+                webView.setLayoutParams(new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                ));
+
+                WebSettings webSettings = webView.getSettings();
+                webSettings.setJavaScriptEnabled(true);
+                webSettings.setDomStorageEnabled(true);
+                webSettings.setDatabaseEnabled(true);
+                webSettings.setSupportMultipleWindows(false);
+                webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+
+                // Use a clean mobile Chrome user agent so Google login does not complain about embedded WebViews
+                String defaultUa = webSettings.getUserAgentString();
+                String cleanUa = defaultUa.replace("; wv", "").replaceAll("Version\\/[0-9.]+\\s", "");
+                webSettings.setUserAgentString(cleanUa);
+
+                CookieManager cookieManager = CookieManager.getInstance();
+                cookieManager.setAcceptCookie(true);
+                cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+                final boolean[] resolved = {false};
+
+                webView.setWebViewClient(new WebViewClient() {
+                    private void checkCookies(String url) {
+                        if (resolved[0]) return;
+                        String cookies = cookieManager.getCookie(url);
+                        if (cookies != null && (cookies.contains("SAPISID=") || cookies.contains("SID="))) {
+                            if (url.contains("music.youtube.com") || url.contains("youtube.com")) {
+                                resolved[0] = true;
+                                JSObject ret = new JSObject();
+                                ret.put("success", true);
+                                ret.put("cookie", cookies);
+
+                                String sapisid = "";
+                                String sid = "";
+                                String ssid = "";
+                                for (String part : cookies.split(";")) {
+                                    String trimmed = part.trim();
+                                    if (trimmed.startsWith("SAPISID=")) sapisid = trimmed.substring(8);
+                                    else if (trimmed.startsWith("SID=")) sid = trimmed.substring(4);
+                                    else if (trimmed.startsWith("SSID=")) ssid = trimmed.substring(5);
+                                }
+                                ret.put("sapisid", sapisid);
+                                ret.put("sid", sid);
+                                ret.put("ssid", ssid);
+
+                                if (loginDialog.isShowing()) {
+                                    loginDialog.dismiss();
+                                }
+                                call.resolve(ret);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        super.onPageFinished(view, url);
+                        checkCookies(url);
+                    }
+
+                    @Override
+                    public void onLoadResource(WebView view, String url) {
+                        super.onLoadResource(view, url);
+                        if (url != null && (url.contains("youtube.com") || url.contains("music.youtube.com"))) {
+                            checkCookies(url);
+                        }
+                    }
+                });
+
+                loginDialog.setOnCancelListener(dialog -> {
+                    if (!resolved[0]) {
+                        resolved[0] = true;
+                        JSObject ret = new JSObject();
+                        ret.put("success", false);
+                        ret.put("cancelled", true);
+                        call.resolve(ret);
+                    }
+                });
+
+                layout.addView(webView);
+                loginDialog.setContentView(layout);
+                loginDialog.show();
+
+                String loginUrl = "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F";
+                webView.loadUrl(loginUrl);
+            } catch (Exception ex) {
+                call.reject("Failed to open login dialog: " + ex.getMessage());
+            }
+        });
     }
 
     private boolean unrestricted() {

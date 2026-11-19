@@ -15580,9 +15580,78 @@ async function fetchAndApplyTranslation() {
   let currentLinkImportMode = 'link';
   let currentLinkImportPlatform = '';
   let googleConnected = false;
-  // YouTube / YouTube Music "Log in" (desktop): the Google login lives in its own browser storage in main.js
-  // (google-library.js), one per profile; this page only learns whether it is logged in and gets the songs back
-  const googleApi = () => (window.electronAPI && typeof window.electronAPI.googleImportLibrary === 'function' && !window.electronAPI.isMobile ? window.electronAPI : null);
+  // YouTube / YouTube Music "Log in":
+  // On desktop: Electron browser session in main.js
+  // On mobile: Native WebView cookie interception via window.EclipseNative.openGoogleLogin + background ytmAuth
+  const isMobileApp = () => (typeof window.EclipseNative !== 'undefined' && typeof window.EclipseNative.openGoogleLogin === 'function');
+  const googleApi = () => {
+    if (window.electronAPI && typeof window.electronAPI.googleImportLibrary === 'function' && !window.electronAPI.isMobile) {
+      return window.electronAPI;
+    }
+    if (isMobileApp()) {
+      return {
+        googleAuthStatus: async () => {
+          try {
+            const res = await fetch(`http://127.0.0.1:${state.serverPort}/api/ytm/accounts`);
+            const data = await res.json();
+            return { loggedIn: !!(data && data.success && data.activeAccount) };
+          } catch (_) {
+            return { loggedIn: false };
+          }
+        },
+        googleLogin: async () => {
+          try {
+            const loginRes = await window.EclipseNative.openGoogleLogin();
+            if (!loginRes || !loginRes.success || !loginRes.cookie) {
+              return { loggedIn: false, error: loginRes?.error || 'Login cancelled' };
+            }
+            const postRes = await fetch(`http://127.0.0.1:${state.serverPort}/api/ytm/intercept-cookie`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cookie: loginRes.cookie })
+            });
+            const data = await postRes.json();
+            return { loggedIn: !!(data && data.success) };
+          } catch (err) {
+            return { loggedIn: false, error: err?.message || String(err) };
+          }
+        },
+        googleLogout: async () => {
+          try {
+            const res = await fetch(`http://127.0.0.1:${state.serverPort}/api/ytm/accounts`);
+            const data = await res.json();
+            if (data && data.activeAccount && data.activeAccount.id) {
+              await fetch(`http://127.0.0.1:${state.serverPort}/api/ytm/remove-account`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: data.activeAccount.id })
+              });
+            }
+          } catch (_) {}
+          return { loggedIn: false };
+        },
+        googleImportLibrary: async (opts) => {
+          try {
+            const res = await fetch(`http://127.0.0.1:${state.serverPort}/api/ytm/library`);
+            const data = await res.json();
+            if (!data || !data.success || !data.library) {
+              return { success: false, error: data?.error || 'Failed to fetch library' };
+            }
+            const lib = data.library;
+            return {
+              success: true,
+              likes: opts.doLikes ? (lib.likes || []) : [],
+              playlists: opts.doPlaylists ? (lib.playlists || []) : [],
+              albums: lib.albums || []
+            };
+          } catch (err) {
+            return { success: false, error: err?.message || String(err) };
+          }
+        }
+      };
+    }
+    return null;
+  };
   const googleProfile = () => (window.EclipseProfiles && window.EclipseProfiles.id) || 'default';
 
   function setLinkStatus(text, isError) {

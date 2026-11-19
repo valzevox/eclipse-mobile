@@ -23,6 +23,9 @@ const { searchSoundcloudApi } = require('./soundcloud-search');
 const { copyStreamToCache } = require('./cache-copy');
 const streamSource = require('./stream-source');
 const ytFast = require('./yt-fast');
+const YtmAuthManager = require('./ytm-auth');
+const ytmAuth = new YtmAuthManager(DATA_DIR);
+
 // request headers yt-dlp would use for each media URL it resolved (#17), for the audio proxy
 const streamHeaders = new Map();
 function rememberStreamHeaders(url, headers) {
@@ -7248,6 +7251,81 @@ const server = http.createServer(guardHandler(async (req, res) => {
   if (parsedUrl.pathname === '/api/lyrics-stream' && req.headers.origin) {
     res.writeHead(403, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ success: false, error: 'forbidden' }));
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/login-url') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, loginUrl: ytmAuth.getLoginUrl() }));
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/accounts') {
+    const accounts = ytmAuth.listAccounts();
+    const active = ytmAuth.getActiveAccount();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true, accounts, activeAccount: active }));
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/intercept-cookie' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const cookie = payload.cookie || '';
+        const account = await ytmAuth.authenticateWithCookie(cookie);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, account }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/switch-account' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const account = ytmAuth.switchAccount(payload.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, account }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/remove-account' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const removed = ytmAuth.removeAccount(payload.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, removed }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
+  }
+
+  if (parsedUrl.pathname === '/api/ytm/library') {
+    try {
+      const lib = await ytmAuth.getUserLibrary();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: true, library: lib }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
   }
 
   if (parsedUrl.pathname === '/api/audio-output-info' && req.method === 'GET') {

@@ -66,6 +66,7 @@ module.exports = function mediaControls() {
 
   window.EclipseNative = {
     openUrl: (url) => plugin.openUrl({ url }).catch(() => { location.href = url; }),
+    openGoogleLogin: () => plugin.openGoogleLogin().catch((err) => ({ success: false, error: err?.message || String(err) })),
     isPlaybackRunning: () => plugin.isPlaybackRunning().catch(() => ({ running: false, playing: false })),
     persistPlaybackStateSync: (state) => plugin.persistPlaybackStateSync({ state: typeof state === 'string' ? state : JSON.stringify(state) }).catch(() => ({ ok: false })),
     downloadAndInstall: (url, onProgress) => {
