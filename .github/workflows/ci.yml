@@ -39,6 +39,9 @@ jobs:
       - name: Run Mobile Bridge Smoke & Regression Tests
         run: node --test test/mobile-bridge-startup.test.js
 
+      - name: Run Full Deterministic Unit Test Suite
+        run: npm test
+
       - name: Sync Capacitor Android
         run: npx cap sync android
 
@@ -47,3 +50,22 @@ jobs:
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
+
+      - name: Verify and Inspect Built APKs
+        run: |
+          count=$(find android/app/build/outputs/apk -name "*.apk" | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No APK files found under android/app/build/outputs/apk"
+            exit 1
+          fi
+          echo "Found $count APK files:"
+          find android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
+          echo "SHA-256 Checksums:"
+          find android/app/build/outputs/apk -name "*.apk" -exec sha256sum {} \;
+
+      - name: Upload Android Debug APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eclipse-android-debug-apks
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

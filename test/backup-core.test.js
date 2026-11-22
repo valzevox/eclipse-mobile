@@ -134,8 +134,8 @@ test('a restore only writes Eclipse keys, checks the playlists through, and keep
   assert.equal(B.keepOnRestore('eclipse_perf_mode', P.isDevice), true);
   assert.equal(B.keepOnRestore('someplugin_state', P.isDevice), true);
   assert.equal(B.keepOnRestore('devsize_playlists', P.isDevice), false);
-  assert.throws(() => B.readBackup({ hello: 1 }), /isn't a Eclipse backup/);
-  assert.throws(() => B.readBackup(null), /isn't a Eclipse backup/);
+  assert.throws(() => B.readBackup({ hello: 1 }), /isn't an Eclipse backup/);
+  assert.throws(() => B.readBackup(null), /isn't an Eclipse backup/);
   const big = 'x'.repeat(B.LIMITS.keyBytes - 10);
   assert.throws(() => B.readBackup({ kind: 'eclipse-backup', data: { eclipse_a: big, eclipse_b: big, eclipse_c: big, eclipse_d: big } }), /too big/);
   assert.ok(B.readBackup({ kind: 'eclipse-backup', data: { eclipse_a: big + 'x'.repeat(20) } }).skipped.includes('eclipse_a'), 'one key over the cap is left out');
@@ -166,7 +166,7 @@ test('Eclipse account files (.rfacc) open, and their eclipse_ keys become Eclips
   const broken = file.slice();
   broken[broken.length - 1] ^= 1;
   await assert.rejects(B.parseBackupFile(broken), /damaged/);
-  await assert.rejects(B.parseBackupFile(new TextEncoder().encode('{nope')), /isn't a Eclipse backup/);
+  await assert.rejects(B.parseBackupFile(new TextEncoder().encode('{nope')), /isn't an Eclipse backup/);
   const own = await B.parseBackupFile(new TextEncoder().encode(JSON.stringify(B.makeBackup([['eclipse_theme_mode', 'dark']]))));
   assert.equal(B.readBackup(own).entries.eclipse_theme_mode, 'dark');
 });

@@ -1,0 +1,29 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build Mobile Web Bundle
+        run: node mobile/build.mjs
+
+      - name: Run Live Network & Integration Tests
+        run: npm run test:integration

@@ -110,6 +110,7 @@ test('Case B: Mobile server startup smoke test (mobile-bridge.js bundle in brows
 
   assert.ok(context.window.electronAPI, 'window.electronAPI must be defined');
   assert.equal(typeof context.window.fetch, 'function', 'window.fetch must be patched by mobile-bridge');
+  assert.equal(typeof context.window.__eclipseFs, 'undefined', 'Production bridge must not expose __eclipseFs on window');
 });
 
 test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () => {
@@ -117,13 +118,24 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
   const bundleCode = fs.readFileSync(bundlePath, 'utf8');
 
   const inMemoryFiles = new Map();
+  const mockTrackId = 'deterministic_track_123';
+  const trackVpath = `/data/tracks/${mockTrackId}.opus`;
+  const trackRpath = `Eclipse/tracks/${mockTrackId}.opus`;
+  const fixturePayload = Buffer.from('RIFF_MOCK_OPUS_PAYLOAD_ECLIPSE_DETERMINISTIC_AUDIO_STREAM_VERIFIED');
+  inMemoryFiles.set(trackRpath, fixturePayload.toString('base64'));
+
   const windowMock = {
     location: { href: 'http://localhost/' },
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => {},
     CustomEvent: function () {},
-    fetch: async (url) => new Response('mock-file-content', { status: 200 }),
+    fetch: async (url) => {
+      if (typeof url === 'string' && url.includes(`_file_/${trackRpath}`)) {
+        return new Response(fixturePayload, { status: 200, headers: { 'content-type': 'audio/ogg' } });
+      }
+      return new Response('mock-fallback', { status: 200 });
+    },
     androidBridge: {},
     Capacitor: {
       convertFileSrc: (uri) => uri,
@@ -147,9 +159,15 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
           }
           if (method === 'stat') {
             const cur = inMemoryFiles.get(args.path) || '';
-            return { type: 'file', size: cur.length, mtime: Date.now() };
+            return { type: 'file', size: 65536, mtime: Date.now() };
           }
           if (method === 'readdir') {
+            if (args.path === 'Eclipse') {
+              return { files: [{ name: 'tracks', type: 'directory' }] };
+            }
+            if (args.path === 'Eclipse/tracks') {
+              return { files: [{ name: `${mockTrackId}.opus`, type: 'file', size: 65536, mtime: Date.now() }] };
+            }
             return { files: [] };
           }
           if (method === 'deleteFile') {
@@ -242,12 +260,7 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
   assert.deepEqual(ytmData.accounts, []);
 
   // 2. Case C1: Deterministic Stream Success Path
-  // Seed mock audio track in virtual filesystem
-  const mockTrackId = 'deterministic_track_123';
-  const trackPath = `/data/tracks/${mockTrackId}.opus`;
-  const dummyAudioBuffer = Buffer.alloc(65536, 0x42);
-  await context.window.__eclipseFs.promises.writeFile(trackPath, dummyAudioBuffer);
-
+  // In-memory audio fixture bytes (transport payload verification via mock filesystem injection)
   const streamRes = await context.window.fetch(`http://127.0.0.1:38472/api/stream-info?id=${mockTrackId}&title=MockSong&artist=MockArtist`);
   assert.equal(streamRes.status, 200, 'Stream request returns HTTP 200 on cached/resolved track');
   const streamData = await streamRes.json();
@@ -257,9 +270,12 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
   assert.ok(streamData.streamUrl.startsWith('http://127.0.0.1:38472/api/local-track?id='), 'streamUrl must point to internal stream proxy');
   assert.ok(streamData.streamUrl.includes('t='), 'streamUrl must be signed with auth token');
 
-  // Verify internal audio streaming proxy serves the byte stream correctly
+  // Verify internal audio streaming proxy serves exact byte stream payload
   const audioFetchRes = await context.window.fetch(streamData.streamUrl);
   assert.equal(audioFetchRes.status, 200, 'Audio proxy returns 200 for cached audio');
+  const fetchedBytes = Buffer.from(await audioFetchRes.arrayBuffer());
+  assert.equal(fetchedBytes.length, fixturePayload.length, 'Stream payload byte length must match seeded fixture');
+  assert.deepEqual(fetchedBytes, fixturePayload, 'Stream payload bytes must match seeded fixture exactly');
 
   // 3. Case C2: Graceful Upstream Error Handling Path
   // Requesting non-existent uncached track without network/extractor resolves to 500 without crashing bridge

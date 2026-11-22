@@ -4,7 +4,12 @@
 // for the first one), apart from the app's own pages: Eclipse's window never gets the Google cookies, and the
 // login window gets neither Eclipse's preload API nor its server token. Only "logged in or not" and the songs
 // (checked and capped here) go back to the page.
-const { BrowserWindow, ipcMain, session, shell } = require('electron');
+let electron = null;
+try { electron = require('electron'); } catch (_) {}
+const BrowserWindow = electron?.BrowserWindow;
+const ipcMain = electron?.ipcMain;
+const session = electron?.session;
+const shell = electron?.shell;
 const crypto = require('crypto');
 
 const PROFILE_RE = /^(?:default|[a-z0-9]{4,16})$/;

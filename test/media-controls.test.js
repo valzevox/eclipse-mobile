@@ -86,7 +86,7 @@ test('notifications are asked for once, after the battery question, island or no
   // never opens Settings by itself
   assert.deepStrictEqual(vivo.asked, ['allow', 'island {"settings":false}']);
   // the playback notification needs them too: also asked with the island off, or before Android 16
-  for (const island of [{ ...off, defaultOn: false }, { ...off, supported: false, defaultOn: false }]) {
+  for (const island of [{ ...off, defaultOn: false }, { ...off, vendor: 'xiaomi', supported: false, defaultOn: false }]) {
     const other = setup('android', { island });
     other.audio.dispatchEvent(new Event('playing'));
     await tick();

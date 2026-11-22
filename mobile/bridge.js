@@ -226,7 +226,6 @@ if (Capacitor.getPlatform() === 'android') {
 
 ready = start();
 window.electronAPI = electronAPI({ ready, port: PORT, fs, fileUrlFor });
-window.__eclipseFs = fs;
 require('./live-activity')();
 require('./media-controls')();
 require('./background-audio')();

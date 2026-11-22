@@ -69,7 +69,7 @@ test('the silent clip is a valid one-second WAV', async () => {
   s.loading(true);
   assert.ok(blob, 'clip built');
   const buf = Buffer.from(await blob.arrayBuffer());
-  assert.strictEqual(buf.toString('ascii', 0, 4), 'ECLIPSE');
+  assert.strictEqual(buf.toString('ascii', 0, 4), 'RIFF');
   assert.strictEqual(buf.toString('ascii', 8, 12), 'WAVE');
   assert.strictEqual(buf.readUInt32LE(4), buf.length - 8);
   assert.strictEqual(buf.readUInt32LE(24), 8000);

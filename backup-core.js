@@ -210,8 +210,8 @@
     devsize_history: (v) => cleanTrackList(v, 5000),
   };
 
-  // Upstream Eclipse's localStorage names: eclipse_x became eclipse_x in Eclipse (tools/rename-riff.py)
-  const fromRiff = (k) => (typeof k === 'string' && k.startsWith('eclipse_') ? `eclipse_${k.slice(5)}` : k);
+  // Upstream Riff's localStorage names: riff_x / eclipse_x mapping
+  const fromRiff = (k) => (typeof k === 'string' && k.startsWith('riff_') ? `eclipse_${k.slice(5)}` : k);
 
   // A backup file's contents (already parsed) -> what a restore writes. Throws an Error with a message for people.
   function readBackup(obj, { isDevice } = {}) {

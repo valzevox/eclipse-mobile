@@ -75,8 +75,14 @@ test('cache copy: a 403 goes straight back to the caller (yt-dlp) without conver
   assert.equal(calls.length, 1);
 });
 
-const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
-test('cache copy with a real ffmpeg: Opus is copied, AAC is converted', { skip: !hasFfmpeg && 'no ffmpeg' }, async () => {
+const hasFfmpeg = (() => {
+  try {
+    return spawnSync('ffmpeg', ['-version']).status === 0 && spawnSync('ffprobe', ['-version']).status === 0;
+  } catch (_) {
+    return false;
+  }
+})();
+test('cache copy with a real ffmpeg: Opus is copied, AAC is converted', { skip: !hasFfmpeg && 'no ffmpeg/ffprobe' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc17-'));
   const opusSrc = path.join(dir, 'a.webm'), aacSrc = path.join(dir, 'b.m4a');
   spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=440:d=8', '-c:a', 'libopus', '-b:a', '96k', opusSrc]);
