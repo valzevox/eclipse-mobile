@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Innertube } = require('youtubei.js');
-const logger = fs.existsSync(path.join(__dirname, 'logger.js')) ? require('./logger') : console;
+const isMobile = typeof process !== 'undefined' && process.versions && process.versions.mobile;
+const logger = isMobile ? console : ((typeof __dirname !== 'undefined' && typeof fs !== 'undefined' && typeof fs.existsSync === 'function' && fs.existsSync(path.join(__dirname, 'logger.js'))) ? require('./logger') : console);
 
 const electronSafeStorage = (typeof process !== 'undefined' && process.versions && process.versions.electron) ? require('electron').safeStorage : null;
 

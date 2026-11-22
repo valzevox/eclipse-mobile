@@ -12,11 +12,11 @@ const shim = (n) => join(root, 'mobile', 'shims', `${n}.js`);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-// server.js requires './platform', './tools', './logger' and './audio-output'; on phones those resolve to the shims.
+// server.js and other modules require './platform', './tools', './logger' and './audio-output'; on phones those resolve to the shims.
 const swapLocal = {
   name: 'eclipse-ios-swaps',
   setup(b) {
-    b.onResolve({ filter: /^\.\/(platform|tools|logger|audio-output)$/ }, (a) => (a.importer.endsWith('server.js') ? { path: shim(a.path.slice(2)) } : undefined));
+    b.onResolve({ filter: /^\.\/(platform|tools|logger|audio-output)$/ }, (a) => ({ path: shim(a.path.slice(2)) }));
   },
 };
 
