@@ -66,9 +66,14 @@ let token;
 before(async () => {
   for (const key of ['HOME', 'USERPROFILE', 'LOCALAPPDATA', 'XDG_CONFIG_HOME']) process.env[key] = tmp;
   process.env.ECLIPSE_DATA_DIR = path.join(tmp, 'data');
-  fs.writeFileSync(fake, '');
+  fs.writeFileSync(fake, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  try { fs.chmodSync(fake, 0o755); } catch (_) {}
   process.env.ECLIPSE_YTDLP = fake;
   process.env.ECLIPSE_FFMPEG = fake;
+  const platform = require('../platform');
+  if (platform && typeof platform.clearBinaryCache === 'function') {
+    platform.clearBinaryCache();
+  }
 
   // Cross-platform deterministic mock for yt-dlp process
   childProcess.spawn = (bin, args, opts) => {
