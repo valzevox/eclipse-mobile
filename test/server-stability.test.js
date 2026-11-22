@@ -28,25 +28,80 @@ let outboundTimeout = null; // shortens the timeout servers ask for (tools downl
 const outboundHosts = [];
 const internet = http.createServer((req, res) => {
   const target = new URL(req.url, 'http://x').searchParams.get('u') || '';
-  outboundHosts.push(new URL(target).hostname);
+  try {
+    outboundHosts.push(new URL(target).hostname);
+  } catch (_) {
+    outboundHosts.push(target);
+  }
   outbound(req, res, target);
 });
-const toInternet = (target) => `http://127.0.0.1:${internet.address().port}/?u=${encodeURIComponent(String(target))}`;
+const toInternet = (target) => {
+  const targetStr = (typeof target === 'object' && target !== null && !(target instanceof URL))
+    ? `http://${target.hostname || target.host || 'unknown'}${target.path || '/'}`
+    : String(target);
+  return `http://127.0.0.1:${internet.address().port}/?u=${encodeURIComponent(targetStr)}`;
+};
+const isLoopbackHost = (h) => !h || h === '127.0.0.1' || h === 'localhost' || h === '::1';
+
+const realHttpGet = http.get;
+const realHttpRequest = http.request;
+const realHttpsGet = https.get;
+const realHttpsRequest = https.request;
+const realFetch = globalThis.fetch;
+
+http.get = (target, ...rest) => {
+  let cb = typeof rest[rest.length - 1] === 'function' ? rest[rest.length - 1] : null;
+  let opts = (rest[0] && typeof rest[0] === 'object' && rest[0] !== cb) ? { ...rest[0] } : {};
+  let host;
+  if (typeof target === 'string') {
+    try { host = new URL(target).hostname; } catch (_) {}
+  } else if (target instanceof URL) {
+    host = target.hostname;
+  } else if (target && typeof target === 'object') {
+    host = target.hostname || target.host;
+  }
+  if (!host || isLoopbackHost(host)) {
+    return realHttpGet.call(http, target, ...rest);
+  }
+  if (opts.timeout && outboundTimeout) opts.timeout = outboundTimeout;
+  return realHttpGet.call(http, toInternet(target), opts, cb);
+};
+
+http.request = (target, ...rest) => {
+  let cb = typeof rest[rest.length - 1] === 'function' ? rest[rest.length - 1] : null;
+  let opts = (rest[0] && typeof rest[0] === 'object' && rest[0] !== cb) ? { ...rest[0] } : {};
+  let host;
+  if (typeof target === 'string') {
+    try { host = new URL(target).hostname; } catch (_) {}
+  } else if (target instanceof URL) {
+    host = target.hostname;
+  } else if (target && typeof target === 'object') {
+    host = target.hostname || target.host;
+  }
+  if (!host || isLoopbackHost(host)) {
+    return realHttpRequest.call(http, target, ...rest);
+  }
+  if (typeof target === 'object' && !(target instanceof URL)) {
+    const { hostname, host: _h, path: urlPath, protocol, port: _port, ...cleanOpts } = target;
+    return realHttpRequest.call(http, toInternet(target), { ...cleanOpts, ...opts }, cb);
+  }
+  return realHttpRequest.call(http, toInternet(target), opts, cb);
+};
+
 https.get = (target, opts, cb) => {
   if (typeof opts === 'function') { cb = opts; opts = {}; }
   const o = { ...(opts || {}) };
   if (o.timeout && outboundTimeout) o.timeout = outboundTimeout;
-  return http.get(toInternet(target), o, cb);
+  return realHttpGet.call(http, toInternet(target), o, cb);
 };
 https.request = (target, opts, cb) => {
   if (typeof opts === 'function') { cb = opts; opts = {}; }
   if (typeof target === 'object' && !(target instanceof URL)) {
     const { hostname, host, path: urlPath, protocol, port: _port, ...rest } = target;
-    return http.request(toInternet(`https://${hostname || host}${urlPath || '/'}`), rest, cb);
+    return realHttpRequest.call(http, toInternet(`https://${hostname || host}${urlPath || '/'}`), rest, cb);
   }
-  return http.request(toInternet(target), opts || {}, cb);
+  return realHttpRequest.call(http, toInternet(target), opts || {}, cb);
 };
-const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : (input?.url || String(input));
   if (url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:')) {
@@ -71,6 +126,10 @@ before(async () => {
 });
 
 after(async () => {
+  http.get = realHttpGet;
+  http.request = realHttpRequest;
+  https.get = realHttpsGet;
+  https.request = realHttpsRequest;
   globalThis.fetch = realFetch;
   await stopServer();
   internet.closeAllConnections();
@@ -206,12 +265,16 @@ test('lyrics that were not found are looked up again later', async () => {
     return json(res, []);
   };
   const route = '/api/lyrics?title=Later%20Song&artist=Later%20Artist';
-  assert.equal(parse(await call('GET', route)).lyrics, null);
+  const first = await call('GET', route);
+  assert.equal(first.status, 200);
+  assert.equal(parse(first).lyrics, null);
   online = true;
   const realNow = Date.now;
   Date.now = () => realNow() + 11 * 60 * 1000;
   try {
-    assert.equal(parse(await call('GET', route)).lyrics, '[00:01.00] found later');
+    const second = await call('GET', route);
+    assert.equal(second.status, 200);
+    assert.equal(parse(second).lyrics, '[00:01.00] found later');
   } finally {
     Date.now = realNow;
   }
@@ -403,4 +466,37 @@ test('featured artists match lyrics engines across lead and collaborator forms',
   const res2 = parse(await call('GET', '/api/lyrics?title=EREN%2C%20fishy%20-%20Pha%20l%C3%AA%20t%C3%ADm&artist=EREN%2C%20fishy&source=lrclib'));
   assert.equal(res2.success, true);
   assert.equal(res2.lyrics, '[00:10.00] test');
+});
+
+test('NetEase lyrics fallback routes through fake transport on HTTP', async () => {
+  const asked = [];
+  outbound = (req, res, target) => {
+    asked.push(target);
+    if (target.includes('music.163.com/api/search/get/web')) {
+      return json(res, {
+        result: {
+          songs: [
+            { id: 99163, name: 'Cloud Song', dt: 200000, artists: [{ name: 'Cloud Singer' }] }
+          ]
+        }
+      });
+    }
+    if (target.includes('music.163.com/api/song/lyric')) {
+      assert.match(target, /id=99163/);
+      return json(res, { lrc: { lyric: '[00:05.00] netease line 1\n[00:10.00] netease line 2' } });
+    }
+    return json(res, {}, 404);
+  };
+
+  // Case 1: Backend finds song and returns lyrics via NetEase
+  const found = parse(await call('GET', '/api/lyrics?title=Cloud%20Song&artist=Cloud%20Singer&source=netease&duration=200'));
+  assert.equal(found.success, true);
+  assert.equal(found.lyrics, '[00:05.00] netease line 1\n[00:10.00] netease line 2');
+  assert.ok(asked.some((u) => u.includes('music.163.com/api/search/get/web')), 'search was routed through fake transport');
+  assert.ok(asked.some((u) => u.includes('music.163.com/api/song/lyric')), 'lyric fetch was routed through fake transport');
+
+  // Case 2: Backend returns nothing when song not found
+  const notFound = parse(await call('GET', '/api/lyrics?title=Missing%20Song&artist=Nobody&source=netease'));
+  assert.equal(notFound.success, true);
+  assert.equal(notFound.lyrics, null);
 });

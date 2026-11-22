@@ -26,6 +26,10 @@ if (mode === 'unit') {
 }
 
 console.log(`[test-runner] Mode: ${mode} | Running ${targetFiles.length} of ${allTestFiles.length} test files...`);
+if (targetFiles.length === 0) {
+  console.log(`[test-runner] Mode: ${mode} | No dedicated tests registered for this mode. Exiting cleanly.`);
+  process.exit(0);
+}
 const paths = targetFiles.map((f) => join('test', f));
 const res = spawnSync(process.execPath, ['--test', ...paths], { stdio: 'inherit' });
 process.exit(res.status ?? 1);
