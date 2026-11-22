@@ -10,6 +10,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const childProcess = require('node:child_process');
+const { EventEmitter } = require('node:events');
 const { createTaskQueue } = require('../ytdlp-queue');
 
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
@@ -55,7 +57,8 @@ test('non-play callers still share a failure', async () => {
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eclipse-retry-'));
 const plan = path.join(tmp, 'plan');
 const count = path.join(tmp, 'count');
-const fake = path.join(tmp, 'yt-dlp');
+const fake = path.join(tmp, process.platform === 'win32' ? 'fake-ytdlp.exe' : 'yt-dlp');
+const origSpawn = childProcess.spawn;
 let server;
 let port;
 let token;
@@ -63,23 +66,47 @@ let token;
 before(async () => {
   for (const key of ['HOME', 'USERPROFILE', 'LOCALAPPDATA', 'XDG_CONFIG_HOME']) process.env[key] = tmp;
   process.env.ECLIPSE_DATA_DIR = path.join(tmp, 'data');
-  // each call: the next word of the plan, "fail" or "ok"; slow enough for a second request to join it
-  fs.writeFileSync(fake, `#!/bin/sh
-n=$(( $(cat "${count}" 2>/dev/null || echo 0) + 1 )); echo $n > "${count}"
-what=$(cut -d, -f$n "${plan}")
-sleep 0.4
-[ "$what" = "fail" ] && { echo "ERROR: passing failure" >&2; exit 1; }
-echo "https://rr1.googlevideo.com/videoplayback?n=$n"
-`);
-  fs.chmodSync(fake, 0o755);
+  fs.writeFileSync(fake, '');
   process.env.ECLIPSE_YTDLP = fake;
   process.env.ECLIPSE_FFMPEG = fake;
+
+  // Cross-platform deterministic mock for yt-dlp process
+  childProcess.spawn = (bin, args, opts) => {
+    let nCalls = 0;
+    try { nCalls = parseInt(fs.readFileSync(count, 'utf8') || '0', 10); } catch (_) {}
+    nCalls++;
+    fs.writeFileSync(count, String(nCalls));
+    let planWords = [];
+    try { planWords = fs.readFileSync(plan, 'utf8').trim().split(','); } catch (_) {}
+    const what = planWords[nCalls - 1] || 'fail';
+
+    const p = new EventEmitter();
+    p.stdout = new EventEmitter();
+    p.stderr = new EventEmitter();
+    p.pid = 99000 + nCalls;
+    p.kill = () => {};
+    setTimeout(() => {
+      if (what === 'fail') {
+        p.stderr.emit('data', 'ERROR: passing failure');
+        p.emit('close', 1);
+      } else {
+        p.stdout.emit('data', `https://rr1.googlevideo.com/videoplayback?n=${nCalls}\n`);
+        p.emit('close', 0);
+      }
+    }, 400);
+    return p;
+  };
+
   server = require('../server.js');
   port = await server.startServer(0);
   token = server.getServerToken();
 });
 
-after(() => { try { server.stopServer(); } catch (_) {} });
+after(() => {
+  childProcess.spawn = origSpawn;
+  try { server.stopServer(); } catch (_) {}
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 
 const get = (p) => new Promise((resolve, reject) => {
   http.get({ host: '127.0.0.1', port, path: p, headers: { 'x-eclipse-token': token } }, (res) => {

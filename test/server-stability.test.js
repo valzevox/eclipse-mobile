@@ -46,6 +46,14 @@ https.request = (target, opts, cb) => {
   }
   return http.request(toInternet(target), opts || {}, cb);
 };
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : (input?.url || String(input));
+  if (url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:')) {
+    return realFetch(input, init);
+  }
+  return realFetch(toInternet(url), init);
+};
 const json = (res, data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
 const resetMidBody = (req, res) => { res.writeHead(200, { 'Content-Length': 100000 }); res.write('{"data":['); setTimeout(() => req.socket.destroy(), 20); };
 
@@ -63,6 +71,7 @@ before(async () => {
 });
 
 after(async () => {
+  globalThis.fetch = realFetch;
   await stopServer();
   internet.closeAllConnections();
   await new Promise((resolve) => internet.close(resolve));

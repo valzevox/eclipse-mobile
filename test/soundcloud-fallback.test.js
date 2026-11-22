@@ -67,6 +67,18 @@ childProcess.spawn = (bin, args) => {
 // no internet: YouTube page searches fail at once, except the result pages a test sets up
 const ytPages = {};
 const ytPage = (videoId, title, owner, length) => `<script>var ytInitialData = ${JSON.stringify({ contents: { twoColumnSearchResultsRenderer: { primaryContents: { sectionListRenderer: { contents: [{ itemSectionRenderer: { contents: [{ videoRenderer: { videoId, title: { runs: [{ text: title }] }, ownerText: { runs: [{ text: owner }] }, lengthText: { simpleText: length } } }] } }] } } } } })};</script>`;
+const origHttpsGet = https.get;
+const origHttpsRequest = https.request;
+const origFetch = globalThis.fetch;
+
+https.request = (url, opts, cb) => {
+  const r = new EventEmitter();
+  r.write = () => {};
+  r.end = () => {};
+  r.destroy = () => {};
+  setImmediate(() => r.emit('error', new Error('offline')));
+  return r;
+};
 https.get = (url, opts, cb) => {
   const r = new EventEmitter();
   r.destroy = () => {};
@@ -109,7 +121,13 @@ globalThis.fetch = async (input) => {
 const { startServer, stopServer, getServerToken } = require('../server');
 let port;
 before(async () => { port = await startServer(0); });
-after(async () => { await stopServer(); fs.rmSync(tmp, { recursive: true, force: true }); });
+after(async () => {
+  https.get = origHttpsGet;
+  https.request = origHttpsRequest;
+  globalThis.fetch = origFetch;
+  await stopServer();
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 
 const get = (p) => new Promise((resolve, reject) => {
   http.get({ host: '127.0.0.1', port, path: p, headers: { 'x-eclipse-token': getServerToken() } }, (res) => {

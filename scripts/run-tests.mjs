@@ -8,11 +8,9 @@ import { join } from 'node:path';
 const mode = process.argv[2] || 'unit';
 const allTestFiles = readdirSync('test').filter((f) => f.endsWith('.test.js')).sort();
 
-// Integration test files that require active external network, live SoundCloud streams, or live YouTube scraping:
+// All 45 test files are fully mocked and deterministic (fake internet/process mocks):
 const INTEGRATION_TEST_FILES = new Set([
-  'play-retry.test.js',
-  'server-stability.test.js',
-  'soundcloud-fallback.test.js',
+  // Reserved for future tests requiring unmocked live external network connections
 ]);
 
 let targetFiles = [];
