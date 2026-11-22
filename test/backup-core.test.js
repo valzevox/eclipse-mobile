@@ -153,14 +153,19 @@ function rfacc(obj) {
 test('Eclipse account files (.rfacc) open, and their eclipse_ keys become Eclipse\'s', async () => {
   const file = rfacc({ app: 'Eclipse', version: '1.0', exportedAt: 1, localStorage: {
     devsize_playlists: JSON.stringify([{ id: 'pl_r', name: 'From Eclipse', tracks: [{ id: YT, title: 'x' }] }]),
-    eclipse_theme_mode: 'light', eclipse_perf_mode: 'true', eclipse_lastfm_sk: 'secret', eclipse_lastfm_apisecret: 's', eclipse_lastfm_enabled: 'true',
+    riff_theme_mode: 'light', eclipse_perf_mode: 'true', eclipse_lastfm_sk: 'secret', eclipse_lastfm_apisecret: 's', eclipse_lastfm_enabled: 'true',
     devsize_discord_rpc: 'true',
+    'riff_invalid key with space': 'bad',
+    eclipse_volume: '0.8',
   } });
   assert.ok(B.isRiffAccount(file));
   const parsed = await B.parseBackupFile(file);
   const r = B.readBackup(parsed, { isDevice: P.isDevice });
   assert.equal(r.source, 'riff');
-  assert.deepEqual(Object.keys(r.entries).sort(), ['devsize_discord_rpc', 'devsize_playlists', 'eclipse_lastfm_enabled', 'eclipse_theme_mode']);
+  assert.deepEqual(Object.keys(r.entries).sort(), ['devsize_discord_rpc', 'devsize_playlists', 'eclipse_lastfm_enabled', 'eclipse_theme_mode', 'eclipse_volume']);
+  assert.equal(r.entries.eclipse_theme_mode, 'light');
+  assert.equal(r.entries.eclipse_volume, '0.8');
+  assert.ok(r.skipped.includes('eclipse_invalid key with space'));
   assert.equal(r.counts.playlists, 1);
   // a damaged file says so
   const broken = file.slice();
