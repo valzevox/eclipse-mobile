@@ -12,15 +12,20 @@ const shim = (n) => join(root, 'mobile', 'shims', `${n}.js`);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-// server.js and other modules require './platform', './tools', './logger' and './audio-output'; on phones those resolve to the shims.
+// Only first-party Eclipse modules (inside repo and outside node_modules) swap to mobile shims.
 const swapLocal = {
   name: 'eclipse-ios-swaps',
   setup(b) {
-    b.onResolve({ filter: /^\.\/(platform|tools|logger|audio-output)$/ }, (a) => ({ path: shim(a.path.slice(2)) }));
+    b.onResolve({ filter: /^\.\/(platform|tools|logger|audio-output)$/ }, (a) => {
+      const normImporter = (a.importer || '').replace(/\\/g, '/');
+      const normRoot = root.replace(/\\/g, '/');
+      const isFirstParty = normImporter.startsWith(normRoot) && !normImporter.includes('/node_modules/');
+      return isFirstParty ? { path: shim(a.path.slice(2)) } : undefined;
+    });
   },
 };
 
-await build({
+const result = await build({
   entryPoints: [join(root, 'mobile', 'bridge.js')],
   outfile: join(out, 'mobile-bridge.js'),
   bundle: true,
@@ -38,8 +43,11 @@ await build({
   inject: [join(root, 'mobile', 'globals.js')],
   define: { 'process.env.NODE_ENV': '"production"', 'require.main': 'undefined' },
   plugins: [swapLocal],
+  metafile: true,
   logLevel: 'warning',
 });
+
+writeFileSync(join(out, 'meta.json'), JSON.stringify(result.metafile));
 
 for (const f of ['app.js', 'styles.css', 'audio-engine.js', 'm3shapes.js', 'lyrics-rtl.js', 'track-sort.js', 'search-text.js', 'track-match.js', 'library-tools.js', 'library-pages.js', 'update-notifier.js', 'lyrics-match.js', 'encore.js', 'sync-core.js', 'sync.js', 'share-link.js', 'profiles-core.js', 'profiles.js', 'lastfm-core.js', 'lastfm.js', 'backup-core.js', 'backup.js', 'i18n.js', 'lyrics-sources.js', 'track-trim.js', 'download-batch.js', 'track-audio.js', 'now-playing.js']) cpSync(join(root, f), join(out, f));
 // iOS or Android is read at runtime; CI fills in the commit and run number

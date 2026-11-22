@@ -96,6 +96,8 @@ test('Case B: Mobile server startup smoke test (mobile-bridge.js bundle in brows
     Response: Response,
     Headers: Headers,
     crypto: crypto.webcrypto,
+    btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    atob: (s) => Buffer.from(s, 'base64').toString('binary'),
   });
 
   // Verify __dirname and __filename are strictly absent from global context
@@ -114,17 +116,88 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
   const bundlePath = path.join(ROOT, 'www', 'mobile-bridge.js');
   const bundleCode = fs.readFileSync(bundlePath, 'utf8');
 
+  const inMemoryFiles = new Map();
   const windowMock = {
     location: { href: 'http://localhost/' },
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => {},
     CustomEvent: function () {},
-    fetch: () => Promise.resolve(),
+    fetch: async (url) => new Response('mock-file-content', { status: 200 }),
+    androidBridge: {},
+    Capacitor: {
+      convertFileSrc: (uri) => uri,
+      nativePromise: async (plugin, method, args) => {
+        if (plugin === 'App') {
+          return { url: '' };
+        }
+        if (plugin === 'Filesystem') {
+          if (method === 'mkdir') return {};
+          if (method === 'writeFile') {
+            inMemoryFiles.set(args.path, args.data);
+            return { uri: `capacitor://localhost/_file_/${args.path}` };
+          }
+          if (method === 'appendFile') {
+            const cur = inMemoryFiles.get(args.path) || '';
+            inMemoryFiles.set(args.path, cur + args.data);
+            return {};
+          }
+          if (method === 'readFile') {
+            return { data: inMemoryFiles.get(args.path) || '' };
+          }
+          if (method === 'stat') {
+            const cur = inMemoryFiles.get(args.path) || '';
+            return { type: 'file', size: cur.length, mtime: Date.now() };
+          }
+          if (method === 'readdir') {
+            return { files: [] };
+          }
+          if (method === 'deleteFile') {
+            inMemoryFiles.delete(args.path);
+            return {};
+          }
+          if (method === 'getUri') {
+            return { uri: `capacitor://localhost/_file_/${args.path}` };
+          }
+          if (method === 'checkPermissions' || method === 'requestPermissions') {
+            return { publicStorage: 'granted' };
+          }
+        }
+        return {};
+      },
+      nativeCallback: (plugin, method, args, cb) => {},
+      PluginHeaders: [
+        {
+          name: 'Filesystem',
+          methods: [
+            { name: 'readFile', rtype: 'promise' },
+            { name: 'writeFile', rtype: 'promise' },
+            { name: 'appendFile', rtype: 'promise' },
+            { name: 'deleteFile', rtype: 'promise' },
+            { name: 'mkdir', rtype: 'promise' },
+            { name: 'rmdir', rtype: 'promise' },
+            { name: 'stat', rtype: 'promise' },
+            { name: 'readdir', rtype: 'promise' },
+            { name: 'getUri', rtype: 'promise' },
+            { name: 'checkPermissions', rtype: 'promise' },
+            { name: 'requestPermissions', rtype: 'promise' },
+          ],
+        },
+        {
+          name: 'App',
+          methods: [
+            { name: 'addListener', rtype: 'callback' },
+            { name: 'getLaunchUrl', rtype: 'promise' },
+            { name: 'minimizeApp', rtype: 'promise' },
+          ],
+        },
+      ],
+    },
   };
 
-  const context = vm.createContext({
+  const contextObj = {
     window: windowMock,
+    globalThis: windowMock,
     document: {
       addEventListener: () => {},
       documentElement: { classList: { add: () => {} } },
@@ -151,7 +224,13 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
     Response: Response,
     Headers: Headers,
     crypto: crypto.webcrypto,
-  });
+    btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+    atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+  };
+  windowMock.globalThis = windowMock;
+  windowMock.window = windowMock;
+
+  const context = vm.createContext(contextObj);
 
   vm.runInContext(bundleCode, context);
 
@@ -162,11 +241,56 @@ test('Case C: Stream-info & YTM route dispatch through mobile bridge', async () 
   assert.equal(ytmData.success, true);
   assert.deepEqual(ytmData.accounts, []);
 
-  // 2. Dispatch stream-info query through bridge fetch
-  const streamRes = await context.window.fetch('http://127.0.0.1:38472/api/stream-info?id=test_track_id');
-  assert.ok(streamRes.status >= 200 && streamRes.status <= 500, 'Stream request dispatched without bridge crash');
+  // 2. Case C1: Deterministic Stream Success Path
+  // Seed mock audio track in virtual filesystem
+  const mockTrackId = 'deterministic_track_123';
+  const trackPath = `/data/tracks/${mockTrackId}.opus`;
+  const dummyAudioBuffer = Buffer.alloc(65536, 0x42);
+  await context.window.__eclipseFs.promises.writeFile(trackPath, dummyAudioBuffer);
+
+  const streamRes = await context.window.fetch(`http://127.0.0.1:38472/api/stream-info?id=${mockTrackId}&title=MockSong&artist=MockArtist`);
+  assert.equal(streamRes.status, 200, 'Stream request returns HTTP 200 on cached/resolved track');
   const streamData = await streamRes.json();
-  assert.ok(typeof streamData.success === 'boolean');
+  assert.equal(streamData.success, true, 'Stream info must report success === true');
+  assert.ok(typeof streamData.streamUrl === 'string' && streamData.streamUrl.length > 0, 'streamUrl must be a non-empty string');
+  assert.doesNotThrow(() => new URL(streamData.streamUrl), 'streamUrl must be a valid URL');
+  assert.ok(streamData.streamUrl.startsWith('http://127.0.0.1:38472/api/local-track?id='), 'streamUrl must point to internal stream proxy');
+  assert.ok(streamData.streamUrl.includes('t='), 'streamUrl must be signed with auth token');
+
+  // Verify internal audio streaming proxy serves the byte stream correctly
+  const audioFetchRes = await context.window.fetch(streamData.streamUrl);
+  assert.equal(audioFetchRes.status, 200, 'Audio proxy returns 200 for cached audio');
+
+  // 3. Case C2: Graceful Upstream Error Handling Path
+  // Requesting non-existent uncached track without network/extractor resolves to 500 without crashing bridge
+  const failRes = await context.window.fetch('http://127.0.0.1:38472/api/stream-info?id=non_existent_uncached_track');
+  assert.equal(failRes.status, 500, 'Uncached track without network returns 500 error response');
+  const failData = await failRes.json();
+  assert.equal(failData.success, false, 'Failed stream resolution reports success === false');
+  assert.ok(failData.error, 'Failed stream resolution returns error message');
+
+  // Verify bridge remains responsive after upstream error
+  const postFailRes = await context.window.fetch('http://127.0.0.1:38472/api/ytm/accounts');
+  assert.equal(postFailRes.status, 200, 'Bridge remains healthy and responsive after error');
+});
+
+test('Case E: First-party mobile shim isolation & zero desktop leaks in bundle', () => {
+  const metaPath = path.join(ROOT, 'www', 'meta.json');
+  assert.ok(fs.existsSync(metaPath), 'meta.json must be generated by mobile build');
+
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  const inputs = Object.keys(meta.inputs);
+
+  // Assert desktop native modules are NOT bundled into mobile-bridge
+  const leakedDesktopModules = inputs.filter((f) => /^(platform|tools|logger|audio-output)\.js$/.test(f));
+  assert.deepEqual(leakedDesktopModules, [], 'Desktop native modules must not leak into mobile bundle');
+
+  // Assert mobile shims are actually resolved and bundled
+  const bundledShims = inputs.filter((f) => f.includes('mobile/shims/'));
+  assert.ok(bundledShims.some((s) => s.includes('platform.js')), 'mobile/shims/platform.js must be bundled');
+  assert.ok(bundledShims.some((s) => s.includes('logger.js')), 'mobile/shims/logger.js must be bundled');
+  assert.ok(bundledShims.some((s) => s.includes('audio-output.js')), 'mobile/shims/audio-output.js must be bundled');
+  assert.ok(bundledShims.some((s) => s.includes('tools.js')), 'mobile/shims/tools.js must be bundled');
 });
 
 test('Case D: Desktop Electron environment preserves native logger', () => {
