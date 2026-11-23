@@ -12,6 +12,7 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 const dns = require('node:dns');
+const net = require('node:net');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eclipse-stability-'));
 for (const key of ['HOME', 'USERPROFILE', 'LOCALAPPDATA', 'XDG_CONFIG_HOME']) process.env[key] = tmp;
@@ -45,19 +46,37 @@ const toInternet = (target) => {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
+function isLoopbackHost(raw) {
+  if (!raw || typeof raw !== 'string') return false;
+  let s = raw.trim().toLowerCase();
+  if (s.startsWith('[') && s.includes(']')) {
+    const end = s.indexOf(']');
+    s = s.slice(1, end);
+  } else if (s.includes(':')) {
+    const parts = s.split(':');
+    if (parts.length === 2 && /^\d+$/.test(parts[1])) s = parts[0];
+  }
+  while (s.endsWith('.')) s = s.slice(0, -1);
+  if (s === 'localhost' || s === '127.0.0.1' || s === '::1') return true;
+  if (net.isIPv4(s) && s.startsWith('127.')) return true;
+  if (net.isIPv6(s)) {
+    if (s === '::1' || s === '0:0:0:0:0:0:0:1' || s === '::ffff:127.0.0.1') return true;
+  }
+  return false;
+}
+
 function normalizeHost(h) {
   if (!h || typeof h !== 'string') return '';
-  let host = h.trim().toLowerCase();
-  // Strip trailing dot in FQDN (localhost.)
-  if (host.endsWith('.')) host = host.slice(0, -1);
-  // Strip IPv6 brackets if present for pure IP check
-  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
-  // Strip port if included in host string (e.g. localhost:8080 or 127.0.0.1:3000)
-  const colonIdx = host.lastIndexOf(':');
-  if (colonIdx > -1 && !host.includes(']')) {
-    host = host.slice(0, colonIdx);
+  let s = h.trim().toLowerCase();
+  if (s.startsWith('[') && s.includes(']')) {
+    const end = s.indexOf(']');
+    s = s.slice(1, end);
+  } else if (s.includes(':')) {
+    const parts = s.split(':');
+    if (parts.length === 2 && /^\d+$/.test(parts[1])) s = parts[0];
   }
-  return host;
+  while (s.endsWith('.')) s = s.slice(0, -1);
+  return s;
 }
 
 function resolveTargetDetails(methodName, target, rest) {
@@ -69,20 +88,26 @@ function resolveTargetDetails(methodName, target, rest) {
   let isCustomOrUntrusted = false;
   let reason = '';
 
-  // Detect custom connection options that could bypass IP/hostname validation
+  // 1. Detect custom connection options that could bypass IP/hostname validation
   if (opts.socketPath || (target && typeof target === 'object' && target.socketPath)) {
     isCustomOrUntrusted = true;
     reason = 'socketPath bypass attempt';
+  } else if (opts.createConnection || (target && typeof target === 'object' && target.createConnection)) {
+    isCustomOrUntrusted = true;
+    reason = 'custom createConnection bypass attempt';
+  } else if (opts.agent || (target && typeof target === 'object' && target.agent)) {
+    isCustomOrUntrusted = true;
+    reason = 'custom agent bypass attempt';
   }
 
+  // 2. Extract host and path
   if (typeof target === 'string') {
     try {
-      const parsed = new URL(target, 'http://dummy.local');
-      // If target was just a path or relative URL, URL constructor treats dummy.local as host
       if (!target.startsWith('http://') && !target.startsWith('https://')) {
         isCustomOrUntrusted = true;
         reason = 'missing protocol or unparseable target string';
       } else {
+        const parsed = new URL(target);
         rawHost = parsed.hostname;
         pathname = parsed.pathname + parsed.search;
       }
@@ -107,16 +132,22 @@ function resolveTargetDetails(methodName, target, rest) {
     reason = 'empty or missing host';
   }
 
-  // If request provides custom lookup to non-loopback host, check for bypass
-  if ((opts.lookup || (target && typeof target === 'object' && target.lookup)) && !LOOPBACK_HOSTS.has(host)) {
-    // Only permit lookup if host is explicitly handled or test upstream
+  // 3. Detect custom lookup options
+  if ((opts.lookup || (target && typeof target === 'object' && target.lookup)) && !isLoopbackHost(host)) {
     if (host !== 'stream.test') {
       isCustomOrUntrusted = true;
       reason = 'custom lookup bypass attempt';
     }
   }
 
-  return { target, opts, cb, host, rawHost, pathname, isCustomOrUntrusted, reason };
+  // 4. Sanitize opts for forwarding to fake server (strip any caller-provided custom transport)
+  const cleanOpts = { ...opts };
+  delete cleanOpts.agent;
+  delete cleanOpts.createConnection;
+  delete cleanOpts.lookup;
+  delete cleanOpts.socketPath;
+
+  return { target, opts: cleanOpts, cb, host, rawHost, pathname, isCustomOrUntrusted, reason, isLoopback: isLoopbackHost(host) };
 }
 
 const realHttpGet = http.get;
@@ -133,7 +164,7 @@ http.get = (target, ...rest) => {
     egressViolations.push({ method: 'http.get', target, reason: details.reason });
     throw err;
   }
-  if (LOOPBACK_HOSTS.has(details.host)) {
+  if (details.isLoopback) {
     return realHttpGet.call(http, target, ...rest);
   }
   const opts = { ...details.opts };
@@ -149,29 +180,48 @@ http.request = (target, ...rest) => {
     egressViolations.push({ method: 'http.request', target, reason: details.reason });
     throw err;
   }
-  if (LOOPBACK_HOSTS.has(details.host)) {
+  if (details.isLoopback) {
     return realHttpRequest.call(http, target, ...rest);
   }
   if (typeof target === 'object' && !(target instanceof URL)) {
-    const { hostname, host: _h, path: urlPath, protocol, port: _port, ...cleanOpts } = target;
-    return realHttpRequest.call(http, toInternet(target), { ...cleanOpts, ...details.opts }, details.cb);
+    const { hostname, host: _h, path: urlPath, protocol, port: _port, ...cleanTargetOpts } = target;
+    return realHttpRequest.call(http, toInternet(target), { ...cleanTargetOpts, ...details.opts }, details.cb);
   }
   return realHttpRequest.call(http, toInternet(target), details.opts, details.cb);
 };
 
-https.get = (target, opts, cb) => {
-  if (typeof opts === 'function') { cb = opts; opts = {}; }
-  const o = { ...(opts || {}) };
-  if (o.timeout && outboundTimeout) o.timeout = outboundTimeout;
-  return realHttpGet.call(http, toInternet(target), o, cb);
-};
-https.request = (target, opts, cb) => {
-  if (typeof opts === 'function') { cb = opts; opts = {}; }
-  if (typeof target === 'object' && !(target instanceof URL)) {
-    const { hostname, host, path: urlPath, protocol, port: _port, ...rest } = target;
-    return realHttpRequest.call(http, toInternet(`https://${hostname || host}${urlPath || '/'}`), rest, cb);
+https.get = (target, ...rest) => {
+  const details = resolveTargetDetails('https.get', target, rest);
+  if (details.isCustomOrUntrusted) {
+    const err = new Error(`EGRESS_BLOCKED: Method: https.get Target: ${JSON.stringify(target)} Reason: ${details.reason}`);
+    err.code = 'EGRESS_BLOCKED';
+    egressViolations.push({ method: 'https.get', target, reason: details.reason });
+    throw err;
   }
-  return realHttpRequest.call(http, toInternet(target), opts || {}, cb);
+  if (details.isLoopback) {
+    return realHttpsGet.call(https, target, ...rest);
+  }
+  const opts = { ...details.opts };
+  if (opts.timeout && outboundTimeout) opts.timeout = outboundTimeout;
+  return realHttpGet.call(http, toInternet(target), opts, details.cb);
+};
+
+https.request = (target, ...rest) => {
+  const details = resolveTargetDetails('https.request', target, rest);
+  if (details.isCustomOrUntrusted) {
+    const err = new Error(`EGRESS_BLOCKED: Method: https.request Target: ${JSON.stringify(target)} Reason: ${details.reason}`);
+    err.code = 'EGRESS_BLOCKED';
+    egressViolations.push({ method: 'https.request', target, reason: details.reason });
+    throw err;
+  }
+  if (details.isLoopback) {
+    return realHttpsRequest.call(https, target, ...rest);
+  }
+  if (typeof target === 'object' && !(target instanceof URL)) {
+    const { hostname, host, path: urlPath, protocol, port: _port, ...cleanTargetOpts } = target;
+    return realHttpRequest.call(http, toInternet(`https://${hostname || host}${urlPath || '/'}`), { ...cleanTargetOpts, ...details.opts }, details.cb);
+  }
+  return realHttpRequest.call(http, toInternet(target), details.opts, details.cb);
 };
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : (input?.url || String(input));
@@ -605,5 +655,60 @@ test('egress guard fails closed on missing, unparseable, custom lookup, or socke
     http.get(12345);
   }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('unsupported target type'));
 
-  assert.equal(egressViolations.length - initialViolations, 5, 'all 5 fail-closed violations were recorded');
+  // 6. HTTPS missing / empty host in options
+  assert.throws(() => {
+    https.get({ path: '/api/test' });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('empty or missing host'));
+
+  // 7. HTTPS invalid URL
+  assert.throws(() => {
+    https.request('ftp://invalid-protocol.com/file');
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('missing protocol or unparseable target string'));
+
+  // 8. HTTPS custom agent bypass attempt
+  assert.throws(() => {
+    https.get('https://external-api.com', { agent: new http.Agent() });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom agent bypass attempt'));
+
+  // 9. HTTPS custom createConnection bypass attempt
+  assert.throws(() => {
+    https.request({ host: 'external-api.com', createConnection: () => {} });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom createConnection bypass attempt'));
+
+  // 10. HTTP custom agent bypass attempt
+  assert.throws(() => {
+    http.get('http://external-api.com', { agent: new http.Agent() });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom agent bypass attempt'));
+
+  // 11. HTTP custom createConnection bypass attempt
+  assert.throws(() => {
+    http.request({ host: 'external-api.com', createConnection: () => {} });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom createConnection bypass attempt'));
+
+  assert.equal(egressViolations.length - initialViolations, 11, 'all 11 fail-closed violations were recorded');
+});
+
+test('normalizeHost and isLoopbackHost correctly distinguish IPv4 and IPv6 loopback vs external', () => {
+  // Loopback variants that MUST pass
+  assert.equal(isLoopbackHost('127.0.0.1'), true);
+  assert.equal(isLoopbackHost('127.0.0.1:8080'), true);
+  assert.equal(isLoopbackHost('localhost'), true);
+  assert.equal(isLoopbackHost('localhost.'), true);
+  assert.equal(isLoopbackHost('localhost:3000'), true);
+  assert.equal(isLoopbackHost('::1'), true);
+  assert.equal(isLoopbackHost('[::1]'), true);
+  assert.equal(isLoopbackHost('[::1]:3000'), true);
+  assert.equal(isLoopbackHost('::ffff:127.0.0.1'), true);
+
+  // External / non-loopback addresses that MUST NOT be considered loopback
+  assert.equal(isLoopbackHost('2001:db8::1'), false);
+  assert.equal(isLoopbackHost('[2001:db8::1]'), false);
+  assert.equal(isLoopbackHost('[2001:db8::1]:80'), false);
+  assert.equal(isLoopbackHost('fe80::1'), false);
+  assert.equal(isLoopbackHost('192.168.1.1'), false);
+  assert.equal(isLoopbackHost('10.0.0.1'), false);
+  assert.equal(isLoopbackHost('example.com'), false);
+  assert.equal(isLoopbackHost('evil-localhost.com'), false);
+  assert.equal(isLoopbackHost(''), false);
+  assert.equal(isLoopbackHost(null), false);
 });
