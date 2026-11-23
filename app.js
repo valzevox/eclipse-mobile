@@ -12192,6 +12192,39 @@ async function fetchAndApplyTranslation() {
     });
   }
 
+  // Dynamic Studio Palettes Swatches
+  if (Array.isArray(window.ECLIPSE_COLOR_PRESETS) && typeof window.applyThemePreset === 'function') {
+    const savedPreset = localStorage.getItem('eclipse_theme_preset');
+    if (savedPreset) {
+      try { window.applyThemePreset(savedPreset); } catch (_) {}
+    }
+    const themeGroup = document.querySelector('.settings-section[data-cat="theme"] .m3-group');
+    if (themeGroup && !document.getElementById('setting-eclipse-studio-palettes')) {
+      const item = document.createElement('div');
+      item.className = 'setting-item';
+      item.id = 'setting-eclipse-studio-palettes';
+      const buttonsHtml = window.ECLIPSE_COLOR_PRESETS.map(p => `
+        <button type="button" class="btn-outline-pill eclipse-studio-palette-btn" data-preset-id="${p.id}" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;">
+          <span style="width:12px;height:12px;border-radius:50%;background:${p.primary};box-shadow:0 0 8px ${p.glow};"></span>
+          <span>${p.name}</span>
+        </button>
+      `).join('');
+      item.innerHTML = `
+        <div class="setting-item-top" style="margin-bottom:8px;">
+          <span class="setting-name">Dynamic Studio Palettes</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">${buttonsHtml}</div>
+      `;
+      themeGroup.insertBefore(item, themeGroup.firstChild);
+      item.querySelectorAll('.eclipse-studio-palette-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pid = btn.getAttribute('data-preset-id');
+          window.applyThemePreset(pid);
+        });
+      });
+    }
+  }
+
   document.body.classList.toggle('no-blur', !getAdv('blur_fx', true));
 
   const sliderGlassBlur = document.getElementById('slider-glass-blur');
