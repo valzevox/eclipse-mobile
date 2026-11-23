@@ -3140,6 +3140,23 @@ body.perf #sleep-timer-status.active::before {
   gap: 0;
   padding: 16px 18px;
 }
+.badge-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.45);
+  margin-left: 8px;
+  vertical-align: middle;
+  line-height: 1.2;
+}
 .beta-badge {
   font-size: calc(10px * var(--font-scale, 1));
   font-weight: 700;

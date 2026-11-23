@@ -12211,7 +12211,7 @@ async function fetchAndApplyTranslation() {
       `).join('');
       item.innerHTML = `
         <div class="setting-item-top" style="margin-bottom:8px;">
-          <span class="setting-name">Dynamic Studio Palettes</span>
+          <span class="setting-name">Dynamic Studio Palettes <span class="badge-new">NEW</span></span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">${buttonsHtml}</div>
       `;
