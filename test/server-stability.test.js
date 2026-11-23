@@ -132,8 +132,8 @@ function resolveTargetDetails(methodName, target, rest) {
     reason = 'empty or missing host';
   }
 
-  // 3. Detect custom lookup options
-  if ((opts.lookup || (target && typeof target === 'object' && target.lookup)) && !isLoopbackHost(host)) {
+  // 3. Detect custom lookup options (disallowed even on loopback unless explicitly whitelisted)
+  if (opts.lookup || (target && typeof target === 'object' && target.lookup)) {
     if (host !== 'stream.test') {
       isCustomOrUntrusted = true;
       reason = 'custom lookup bypass attempt';
@@ -148,6 +148,59 @@ function resolveTargetDetails(methodName, target, rest) {
   delete cleanOpts.socketPath;
 
   return { target, opts: cleanOpts, cb, host, rawHost, pathname, isCustomOrUntrusted, reason, isLoopback: isLoopbackHost(host) };
+}
+
+function resolveFetchDetails(input, init) {
+  let url = '';
+  let isCustomOrUntrusted = false;
+  let reason = '';
+  let cleanInit = { ...(init || {}) };
+
+  // 1. Detect custom dispatcher or transport in init or input
+  if (cleanInit.dispatcher) {
+    isCustomOrUntrusted = true;
+    reason = 'custom fetch dispatcher bypass attempt';
+  }
+
+  // 2. Extract and validate URL from input
+  if (typeof input === 'string') {
+    url = input;
+  } else if (input instanceof URL) {
+    url = input.toString();
+  } else if (typeof Request !== 'undefined' && input instanceof Request) {
+    url = input.url;
+    if (input.dispatcher) {
+      isCustomOrUntrusted = true;
+      reason = 'custom Request dispatcher bypass attempt';
+    }
+  } else if (input && typeof input === 'object' && typeof input.url === 'string') {
+    url = input.url;
+    if (input.dispatcher) {
+      isCustomOrUntrusted = true;
+      reason = 'custom input dispatcher bypass attempt';
+    }
+  } else {
+    isCustomOrUntrusted = true;
+    reason = `unsupported fetch input type: ${typeof input}`;
+  }
+
+  if (!isCustomOrUntrusted) {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        isCustomOrUntrusted = true;
+        reason = `unsupported fetch protocol: ${parsed.protocol}`;
+      }
+    } catch (e) {
+      isCustomOrUntrusted = true;
+      reason = `unparseable fetch URL: ${e.message}`;
+    }
+  }
+
+  // 3. Sanitize init (strip any dispatcher / custom transport before forward)
+  delete cleanInit.dispatcher;
+
+  return { url, cleanInit, isCustomOrUntrusted, reason };
 }
 
 const realHttpGet = http.get;
@@ -224,11 +277,17 @@ https.request = (target, ...rest) => {
   return realHttpRequest.call(http, toInternet(target), details.opts, details.cb);
 };
 globalThis.fetch = async (input, init) => {
-  const url = typeof input === 'string' ? input : (input?.url || String(input));
-  if (url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:')) {
-    return realFetch(input, init);
+  const details = resolveFetchDetails(input, init);
+  if (details.isCustomOrUntrusted) {
+    const err = new Error(`EGRESS_BLOCKED: Method: fetch URL: ${details.url} Reason: ${details.reason}`);
+    err.code = 'EGRESS_BLOCKED';
+    egressViolations.push({ method: 'fetch', url: details.url, reason: details.reason });
+    throw err;
   }
-  return realFetch(toInternet(url), init);
+  if (details.url.startsWith('http://127.0.0.1:') || details.url.startsWith('http://localhost:')) {
+    return realFetch(input, details.cleanInit);
+  }
+  return realFetch(toInternet(details.url), details.cleanInit);
 };
 const json = (res, data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
 const resetMidBody = (req, res) => { res.writeHead(200, { 'Content-Length': 100000 }); res.write('{"data":['); setTimeout(() => req.socket.destroy(), 20); };
@@ -650,6 +709,38 @@ test('egress guard fails closed on missing, unparseable, custom lookup, or socke
     });
   }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
 
+  // 4b. Custom lookup on localhost (MUST fail-closed)
+  assert.throws(() => {
+    http.get('http://localhost:8080/api', {
+      lookup: (h, cb) => cb(null, '93.184.216.34', 4)
+    });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
+
+  // 4c. Custom lookup on 127.0.0.1 (MUST fail-closed)
+  assert.throws(() => {
+    http.request({
+      host: '127.0.0.1',
+      path: '/api',
+      lookup: (h, cb) => cb(null, '93.184.216.34', 4)
+    });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
+
+  // 4d. HTTPS custom lookup on localhost (MUST fail-closed)
+  assert.throws(() => {
+    https.get('https://localhost:8443/api', {
+      lookup: (h, cb) => cb(null, '93.184.216.34', 4)
+    });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
+
+  // 4e. HTTPS custom lookup on [::1] (MUST fail-closed)
+  assert.throws(() => {
+    https.request({
+      host: '[::1]',
+      path: '/api',
+      lookup: (h, cb) => cb(null, '93.184.216.34', 4)
+    });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
+
   // 5. Unsupported target type
   assert.throws(() => {
     http.get(12345);
@@ -685,11 +776,37 @@ test('egress guard fails closed on missing, unparseable, custom lookup, or socke
     http.request({ host: 'external-api.com', createConnection: () => {} });
   }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom createConnection bypass attempt'));
 
-  assert.equal(egressViolations.length - initialViolations, 11, 'all 11 fail-closed violations were recorded');
+  // 12. Fetch custom dispatcher bypass attempt
+  assert.rejects(async () => {
+    await globalThis.fetch('https://external-api.com', { dispatcher: {} });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom fetch dispatcher bypass attempt'));
+
+  // 13. Fetch malformed URL / unsupported protocol
+  assert.rejects(async () => {
+    await globalThis.fetch('ftp://unsupported.com/file');
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('unsupported fetch protocol'));
+
+  // 14. Fetch unsupported input type
+  assert.rejects(async () => {
+    await globalThis.fetch(null);
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('unsupported fetch input type'));
+
+  assert.equal(egressViolations.length - initialViolations, 18, 'all 18 fail-closed violations were recorded');
 });
 
 test('normalizeHost and isLoopbackHost correctly distinguish IPv4 and IPv6 loopback vs external', () => {
-  // Loopback variants that MUST pass
+  // Direct assertions for normalizeHost()
+  assert.equal(normalizeHost('127.0.0.1:8080'), '127.0.0.1');
+  assert.equal(normalizeHost('localhost:3000'), 'localhost');
+  assert.equal(normalizeHost('localhost.'), 'localhost');
+  assert.equal(normalizeHost('[::1]:3000'), '::1');
+  assert.equal(normalizeHost('2001:db8::1'), '2001:db8::1');
+  assert.equal(normalizeHost('[2001:db8::1]:80'), '2001:db8::1');
+  assert.equal(normalizeHost(''), '');
+  assert.equal(normalizeHost(null), '');
+  assert.equal(normalizeHost(undefined), '');
+
+  // Loopback variants that MUST pass isLoopbackHost()
   assert.equal(isLoopbackHost('127.0.0.1'), true);
   assert.equal(isLoopbackHost('127.0.0.1:8080'), true);
   assert.equal(isLoopbackHost('localhost'), true);
