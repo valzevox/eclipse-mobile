@@ -25,5 +25,5 @@ jobs:
       - name: Build Mobile Web Bundle
         run: node mobile/build.mjs
 
-      - name: Run Live Network & Integration Tests
+      - name: Check Dedicated Integration Tests (exit cleanly if none registered)
         run: npm run test:integration

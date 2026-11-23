@@ -26,6 +26,7 @@ fs.writeFileSync(path.join(tmp, 'data', 'library.json'), JSON.stringify({
 let outbound = (req) => req.socket.destroy(); // default: every outside request fails
 let outboundTimeout = null; // shortens the timeout servers ask for (tools download test)
 const outboundHosts = [];
+const egressViolations = [];
 const internet = http.createServer((req, res) => {
   const target = new URL(req.url, 'http://x').searchParams.get('u') || '';
   try {
@@ -41,7 +42,82 @@ const toInternet = (target) => {
     : String(target);
   return `http://127.0.0.1:${internet.address().port}/?u=${encodeURIComponent(targetStr)}`;
 };
-const isLoopbackHost = (h) => !h || h === '127.0.0.1' || h === 'localhost' || h === '::1';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+function normalizeHost(h) {
+  if (!h || typeof h !== 'string') return '';
+  let host = h.trim().toLowerCase();
+  // Strip trailing dot in FQDN (localhost.)
+  if (host.endsWith('.')) host = host.slice(0, -1);
+  // Strip IPv6 brackets if present for pure IP check
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  // Strip port if included in host string (e.g. localhost:8080 or 127.0.0.1:3000)
+  const colonIdx = host.lastIndexOf(':');
+  if (colonIdx > -1 && !host.includes(']')) {
+    host = host.slice(0, colonIdx);
+  }
+  return host;
+}
+
+function resolveTargetDetails(methodName, target, rest) {
+  let cb = typeof rest[rest.length - 1] === 'function' ? rest[rest.length - 1] : null;
+  let opts = (rest[0] && typeof rest[0] === 'object' && rest[0] !== cb) ? { ...rest[0] } : {};
+  let host = '';
+  let rawHost = '';
+  let pathname = '/';
+  let isCustomOrUntrusted = false;
+  let reason = '';
+
+  // Detect custom connection options that could bypass IP/hostname validation
+  if (opts.socketPath || (target && typeof target === 'object' && target.socketPath)) {
+    isCustomOrUntrusted = true;
+    reason = 'socketPath bypass attempt';
+  }
+
+  if (typeof target === 'string') {
+    try {
+      const parsed = new URL(target, 'http://dummy.local');
+      // If target was just a path or relative URL, URL constructor treats dummy.local as host
+      if (!target.startsWith('http://') && !target.startsWith('https://')) {
+        isCustomOrUntrusted = true;
+        reason = 'missing protocol or unparseable target string';
+      } else {
+        rawHost = parsed.hostname;
+        pathname = parsed.pathname + parsed.search;
+      }
+    } catch (e) {
+      isCustomOrUntrusted = true;
+      reason = `unparseable URL string: ${e.message}`;
+    }
+  } else if (target instanceof URL) {
+    rawHost = target.hostname;
+    pathname = target.pathname + target.search;
+  } else if (target && typeof target === 'object') {
+    rawHost = target.hostname || target.host || opts.hostname || opts.host || '';
+    pathname = target.path || opts.path || '/';
+  } else {
+    isCustomOrUntrusted = true;
+    reason = `unsupported target type: ${typeof target}`;
+  }
+
+  host = normalizeHost(rawHost);
+  if (!host && !isCustomOrUntrusted) {
+    isCustomOrUntrusted = true;
+    reason = 'empty or missing host';
+  }
+
+  // If request provides custom lookup to non-loopback host, check for bypass
+  if ((opts.lookup || (target && typeof target === 'object' && target.lookup)) && !LOOPBACK_HOSTS.has(host)) {
+    // Only permit lookup if host is explicitly handled or test upstream
+    if (host !== 'stream.test') {
+      isCustomOrUntrusted = true;
+      reason = 'custom lookup bypass attempt';
+    }
+  }
+
+  return { target, opts, cb, host, rawHost, pathname, isCustomOrUntrusted, reason };
+}
 
 const realHttpGet = http.get;
 const realHttpRequest = http.request;
@@ -50,42 +126,37 @@ const realHttpsRequest = https.request;
 const realFetch = globalThis.fetch;
 
 http.get = (target, ...rest) => {
-  let cb = typeof rest[rest.length - 1] === 'function' ? rest[rest.length - 1] : null;
-  let opts = (rest[0] && typeof rest[0] === 'object' && rest[0] !== cb) ? { ...rest[0] } : {};
-  let host;
-  if (typeof target === 'string') {
-    try { host = new URL(target).hostname; } catch (_) {}
-  } else if (target instanceof URL) {
-    host = target.hostname;
-  } else if (target && typeof target === 'object') {
-    host = target.hostname || target.host;
+  const details = resolveTargetDetails('http.get', target, rest);
+  if (details.isCustomOrUntrusted) {
+    const err = new Error(`EGRESS_BLOCKED: Method: http.get Target: ${JSON.stringify(target)} Reason: ${details.reason}`);
+    err.code = 'EGRESS_BLOCKED';
+    egressViolations.push({ method: 'http.get', target, reason: details.reason });
+    throw err;
   }
-  if (!host || isLoopbackHost(host)) {
+  if (LOOPBACK_HOSTS.has(details.host)) {
     return realHttpGet.call(http, target, ...rest);
   }
+  const opts = { ...details.opts };
   if (opts.timeout && outboundTimeout) opts.timeout = outboundTimeout;
-  return realHttpGet.call(http, toInternet(target), opts, cb);
+  return realHttpGet.call(http, toInternet(target), opts, details.cb);
 };
 
 http.request = (target, ...rest) => {
-  let cb = typeof rest[rest.length - 1] === 'function' ? rest[rest.length - 1] : null;
-  let opts = (rest[0] && typeof rest[0] === 'object' && rest[0] !== cb) ? { ...rest[0] } : {};
-  let host;
-  if (typeof target === 'string') {
-    try { host = new URL(target).hostname; } catch (_) {}
-  } else if (target instanceof URL) {
-    host = target.hostname;
-  } else if (target && typeof target === 'object') {
-    host = target.hostname || target.host;
+  const details = resolveTargetDetails('http.request', target, rest);
+  if (details.isCustomOrUntrusted) {
+    const err = new Error(`EGRESS_BLOCKED: Method: http.request Target: ${JSON.stringify(target)} Reason: ${details.reason}`);
+    err.code = 'EGRESS_BLOCKED';
+    egressViolations.push({ method: 'http.request', target, reason: details.reason });
+    throw err;
   }
-  if (!host || isLoopbackHost(host)) {
+  if (LOOPBACK_HOSTS.has(details.host)) {
     return realHttpRequest.call(http, target, ...rest);
   }
   if (typeof target === 'object' && !(target instanceof URL)) {
     const { hostname, host: _h, path: urlPath, protocol, port: _port, ...cleanOpts } = target;
-    return realHttpRequest.call(http, toInternet(target), { ...cleanOpts, ...opts }, cb);
+    return realHttpRequest.call(http, toInternet(target), { ...cleanOpts, ...details.opts }, details.cb);
   }
-  return realHttpRequest.call(http, toInternet(target), opts, cb);
+  return realHttpRequest.call(http, toInternet(target), details.opts, details.cb);
 };
 
 https.get = (target, opts, cb) => {
@@ -290,15 +361,17 @@ test('aborting a proxied stream closes the upstream connection', async () => {
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
   const realLookup = dns.promises.lookup;
-  const realRequest = http.request;
   dns.promises.lookup = async (host, opts) => (host === 'stream.test' ? [{ address: '93.184.216.34', family: 4 }] : realLookup(host, opts));
-  http.request = function (target, ...rest) {
-    if (String(target).includes('stream.test')) {
-      target = String(target).replace('stream.test', `127.0.0.1:${upstream.address().port}`);
-      // the proxy pins the address it checked (93.184.216.34 here); the stand-in upstream lives on 127.0.0.1
-      if (rest[0] && typeof rest[0] === 'object') { const { lookup, ...opts } = rest[0]; rest[0] = opts; }
+  outbound = (req, res, target) => {
+    if (target.includes('stream.test') || target.includes('song.mp3')) {
+      const upReq = realHttpGet.call(http, `http://127.0.0.1:${upstream.address().port}/song.mp3`, (upRes) => {
+        res.writeHead(upRes.statusCode, upRes.headers);
+        upRes.pipe(res);
+      });
+      req.on('close', () => upReq.destroy());
+      return;
     }
-    return realRequest.call(this, target, ...rest);
+    req.socket.destroy();
   };
   try {
     for (let i = 0; i < 3; i++) {
@@ -314,7 +387,6 @@ test('aborting a proxied stream closes the upstream connection', async () => {
     assert.equal(open, 0, 'upstream downloads kept running after the player went away');
   } finally {
     dns.promises.lookup = realLookup;
-    http.request = realRequest;
     upstream.closeAllConnections();
     await new Promise((resolve) => upstream.close(resolve));
   }
@@ -499,4 +571,39 @@ test('NetEase lyrics fallback routes through fake transport on HTTP', async () =
   const notFound = parse(await call('GET', '/api/lyrics?title=Missing%20Song&artist=Nobody&source=netease'));
   assert.equal(notFound.success, true);
   assert.equal(notFound.lyrics, null);
+});
+
+test('egress guard fails closed on missing, unparseable, custom lookup, or socketPath requests', () => {
+  const initialViolations = egressViolations.length;
+
+  // 1. Missing / empty host in options
+  assert.throws(() => {
+    http.get({ path: '/api/test' });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('empty or missing host'));
+
+  // 2. Relative or unparseable target string
+  assert.throws(() => {
+    http.request('/relative/path/without/protocol');
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('missing protocol or unparseable target string'));
+
+  // 3. socketPath bypass attempt
+  assert.throws(() => {
+    http.get({ socketPath: '/var/run/docker.sock', path: '/v1.24/info' });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('socketPath bypass attempt'));
+
+  // 4. Custom lookup on untrusted non-loopback host
+  assert.throws(() => {
+    http.request({
+      host: 'evil-external.com',
+      path: '/steal',
+      lookup: (h, cb) => cb(null, '127.0.0.1', 4)
+    });
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('custom lookup bypass attempt'));
+
+  // 5. Unsupported target type
+  assert.throws(() => {
+    http.get(12345);
+  }, (err) => err.code === 'EGRESS_BLOCKED' && err.message.includes('unsupported target type'));
+
+  assert.equal(egressViolations.length - initialViolations, 5, 'all 5 fail-closed violations were recorded');
 });
